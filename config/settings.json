@@ -1,0 +1,48 @@
+{
+   // Required
+   "todoist_api_token": "",
+   /* https://developer.todoist.com/sync/v7/#limits
+      60s/1.5s = 40 requests/min to prevent Todoist timeouts */
+   "daemon.refreshRateSec": 1.5,
+
+   // Aesthetics
+   "appearance.displayRecceringIcon": false,
+
+   // Logging
+   "logging" : true,
+   "logging.mailHandler": [],
+
+   // Keywords to be mapped to unicode icons for parser use
+
+   // User Preferences
+   "projects.excluded": [],
+   "projects.standalone": [],
+   "completed.daysToRetrieve": 30, // change this to tasks.completedDaysToRetrieve....
+
+   // TODO.......
+   "procrastination.detection": true,
+   "procrastination.overdueOccurenceLimit": 2,
+   "procrastination.resheduleOccurenceLimit": 5,
+
+   // TODO.......
+   "tasks.completedCalendar": true,
+
+   // TODO.......
+   "tasks.priorityAutoAdjust": true,
+   "tasks.priorityAutoAdjustExclude": ["project_name"],
+
+   // TODO
+   "events.notification": true,
+   "events.reminder": [
+       {
+        "method": "popup",
+        "minutes": 300
+        }],
+
+    // TODO...
+    "icons.prioritySet1": ["１", "２", "３", "４"],
+    "icons.prioritySet2": ["①", "②", "③", "④"],
+    "icons.eventSet": ["１", "２", "３", "４", "⚠", "⚛️", "📖", "🚗", "📺", "🐞", "📟", "⚙️",
+        "🚀", "🚧", "💠", "🕹", "☎️", "🗑️", "👨‍💻", "❓", "💈", "🛒", "🎫",
+         "🔎", "💵", "🍳", "🌐", "🔔", "📧", "📬", "🗓", "🏦", "🏠", "🍿"]
+}
