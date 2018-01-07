@@ -1,0 +1,8 @@
+google-api-python-client
+schedule 
+jsmin 
+backoff 
+todoist-python 
+pytz 
+jsonschema 
+python-dateutil
