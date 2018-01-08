@@ -112,12 +112,13 @@ class GcalSync:
 
                     if event['status'] == 'cancelled' and event['id'] != self.__gcal.todoist.changed_location_of_event:
                         # delete task from Todoist
-                        if self.__gcal.todoist.delete_task(task_id):
-                            log.info('Task with id: ' + str(task_id)  + ' has been deleted from Gcal and from Todoist.')
+                        if task_id is not None and self.__gcal.todoist.delete_task(task_id):
+                            log.info('Task: ' + str(task_id)  + ' has been deleted from Gcal and from Todoist.')
                     elif event['updated']:
                         # no try-catch block used, becuase of expo backoff decorator
                         new_event_date = event['start']['date']
-                        self.__gcal.todoist.update_task_due_date(cal_id, event['id'], task_id, new_event_date)
+                        if task_id is not None:
+                            self.__gcal.todoist.update_task_due_date(cal_id, event['id'], task_id, new_event_date)
 
                 page_token = events.get('nextPageToken')
             if not page_token:
