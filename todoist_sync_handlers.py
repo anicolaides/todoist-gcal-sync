@@ -200,58 +200,64 @@ class TodoistSync:
         return desc
 
     def overdue(self):
+        table_exists = True
         conn = sqlite3.connect('db/data.db')
 
         c = conn.cursor()
 
         with conn:
-            c.execute("SELECT due_date, event_id, task_id, project_id, parent_project_id FROM \
-                todoist WHERE overdue is NULL")
+            try:
+                c.execute("SELECT due_date, event_id, task_id, project_id, parent_project_id FROM \
+                    todoist WHERE overdue is NULL")
+            except sqlite3.OperationalError as err:
+                log.warning(err)
+                table_exists = False
 
-            not_overdue_tasks = c.fetchall()
+            if table_exists:
+                not_overdue_tasks = c.fetchall()
 
-            if not_overdue_tasks:
-                for task in range(0, len(not_overdue_tasks)):
-                    task_due_date = self.__todoist.__todoist_utc_to_date__(
-                        not_overdue_tasks[task][0])
+                if not_overdue_tasks:
+                    for task in range(0, len(not_overdue_tasks)):
+                        task_due_date = self.__todoist.__todoist_utc_to_date__(
+                            not_overdue_tasks[task][0])
 
-                    local = pytz.timezone(self.timezone())
-                    todays_date_utc = datetime.now(local).astimezone(pytz.utc).date()
-                    difference = (task_due_date - todays_date_utc).days
+                        local = pytz.timezone(self.timezone())
+                        todays_date_utc = datetime.now(local).astimezone(pytz.utc).date()
+                        difference = (task_due_date - todays_date_utc).days
 
-                    item = self.__todoist.api.items.get_by_id(not_overdue_tasks[task][2])
+                        item = self.__todoist.api.items.get_by_id(not_overdue_tasks[task][2])
 
-                    if difference < 0 and item is not None:
-                        overdue = True
+                        if difference < 0 and item is not None:
+                            overdue = True
 
-                        # update priority of task from p2 to p1
-                        if item['priority'] == 3: # p2 in Todoist client
-                            item.update(priority=4) # p1 in Todoist client
-                            self.__todoist.api.commit()
+                            # update priority of task from p2 to p1
+                            if item['priority'] == 3: # p2 in Todoist client
+                                item.update(priority=4) # p1 in Todoist client
+                                self.__todoist.api.commit()
 
-                        event_name = self.event_name(item)
+                            event_name = self.event_name(item)
 
-                        calendar_id = self.__todoist.find_task_calId(not_overdue_tasks[task][3], \
-                            not_overdue_tasks[task][4])
+                            calendar_id = self.__todoist.find_task_calId(not_overdue_tasks[task][3], \
+                                not_overdue_tasks[task][4])
 
-                        if calendar_id:
-                            if self.__gcal.update_event_summary(calendar_id, \
-                                not_overdue_tasks[task][1], event_name) and \
-                                self.__gcal.update_event_color(calendar_id, \
-                                not_overdue_tasks[task][1], 11):
+                            if calendar_id:
+                                if self.__gcal.update_event_summary(calendar_id, \
+                                    not_overdue_tasks[task][1], event_name) and \
+                                    self.__gcal.update_event_color(calendar_id, \
+                                    not_overdue_tasks[task][1], 11):
 
-                                # update 'todoist' table to reflect overdue status
-                                try:
-                                    c.execute("UPDATE todoist SET overdue = ? WHERE task_id = ?",
-                                        (overdue, not_overdue_tasks[task][2] ,))
-                                    conn.commit()
-                                    log.info('Task with id: ' + str(item['id']) + ' has become overdue.')
-                                except sqlite3.OperationalError as err:
-                                    log.error(err)
-                                    log.warning('Could update event date on Gcal, but could not update \
-                                        Todoist table.')
-                            else:
-                                log.error('ERROR:  + overdue()')
+                                    # update 'todoist' table to reflect overdue status
+                                    try:
+                                        c.execute("UPDATE todoist SET overdue = ? WHERE task_id = ?",
+                                            (overdue, not_overdue_tasks[task][2] ,))
+                                        conn.commit()
+                                        log.info('Task with id: ' + str(item['id']) + ' has become overdue.')
+                                    except sqlite3.OperationalError as err:
+                                        log.error(err)
+                                        log.warning('Could update event date on Gcal, but could not update \
+                                            Todoist table.')
+                                else:
+                                    log.error('ERROR:  + overdue()')
 
         conn.close()
 
