@@ -141,8 +141,8 @@ class Todoist:
             # Todoist task --> Gcal event
             self.sync.new_task_added(item)
 
-        log.debug("Pauasing operation for 20s, to prevent reaching Todoist's user limits due to " \
-        + "initialization utilizing massive amounts of requests.")
+        log.debug("Pausing operation for 20s, to prevent reaching Todoist's user limits due to " \
+        + "initialization utilizing massive amount of requests.")
         time.sleep(20)
 
     def projects_gcal(self):
@@ -388,7 +388,6 @@ class Todoist:
 
         # case where Todoist sync is an empty string
         while new_api_sync == '':
-            log.debug("Todoist's HTTP POST respone, while performing an api sync request, was ''.")
             new_api_sync = Todoist.api.sync()
 
         # Pauses until a valid Todoist API sync response is retrieved
@@ -433,7 +432,8 @@ class Todoist:
                         if calendar_id and task_data:
 
                             recurring_task_completed = False
-                            if 'every' in changes[i]['date_string'].lower():
+                            if 'every' in changes[i]['date_string'].lower() and self.premium_user:
+
                                 try:
                                     # give some time for Todoist's servers to update activity log
                                     time.sleep(2)
@@ -540,7 +540,7 @@ class Todoist:
                             self.sync.new_task_added(changes[i])
                         except Exception as err:
                             write_to_db = False
-                            log.error('task id: ' + str(task_id) \
+                            log.exception('task id: ' + str(task_id) \
                                 + ' could not be added to Google Calendar.')
 
             # for each note changed, perform the following operations
@@ -648,6 +648,7 @@ class Todoist:
         return op_code
 
     def update_task_due_date(self, cal_id, event_id, task_id, new_event_date):
+        todoist_tz = pytz.timezone(self.sync.timezone())
         conn = sqlite3.connect('db/data.db')
 
         with conn:
@@ -660,7 +661,7 @@ class Todoist:
                 # turn google date to todoist utc date
                 due_date = due_date[0]
                 new_due_date = self.parse_google_date(new_event_date)
-                new_due_date = new_due_date.replace(hour=23, minute=59, second=59)
+                new_due_date = new_due_date.replace(hour=21, minute=59, second=59)
                 new_due_date = new_due_date.isoformat()
 
                 try:
@@ -681,7 +682,7 @@ class Todoist:
                 except Exception as err:
                     log.exception(err)
 
-                difference = (task_due_date - datetime.today().date()).days
+                difference = (task_due_date - datetime.now(todoist_tz).date()).days
 
                 # if task is not overdue and task was overdue previously
                 if difference >= 0 and not self.is_overdue(task_id):
@@ -858,13 +859,13 @@ class Todoist:
             validate(sync_response, self.sync_schema)
         except exceptions.ValidationError as err:
             sync_schema_valid = False
-            log.debug(err)
+            log.debug("Failed to validate Todoist's sync schema.")
 
             try:
                 validate(sync_response, self.sync_error_schema)
             except exceptions.ValidationError as err:
                 sync_err_schema_valid = False
-                log.warning(err)
+
         return (sync_schema_valid, sync_err_schema_valid)
 
     ########### Utility functions ###########
@@ -876,17 +877,17 @@ class Todoist:
         """ Takes in a Todoist task's due date (UTC), and converts it to a normal date. """
         return datetime.strptime(google_date, '%Y-%m-%d')
 
-    def __todoist_utc_to_date__(self, date_str):
-        """ Return date in Todoist timezone. """
-        if type(date_str) is str:
-            todoist_timezone = pytz.timezone(self.sync.timezone())
+    def __todoist_utc_to_date__(self, date_utc_str):
+        """ Converts date from UTC to Todoist's timezone and returns a date obj. """
+        if type(date_utc_str) is str:
+            todoist_tz = pytz.timezone(self.sync.timezone())
             date_obj = None
             try:
-                # tries to recover from date that is in the wrong type, using a parser
-                datetime_obj = dateutil.parser.parse(date_str)
-                date_str = datetime.strftime(datetime_obj, '%a %d %b %Y %H:%M:%S +0000')
-                date_obj = datetime.strptime(date_str, "%a %d %b %Y %H:%M:%S +0000") \
-                    .replace(tzinfo=pytz.UTC).astimezone(tz=None).date()
+                # tries to recover from date that may be in the wrong type, using a parser
+                datetime_obj = dateutil.parser.parse(date_utc_str)
+                date_utc_str = datetime.strftime(datetime_obj, '%a %d %b %Y %H:%M:%S +0000')
+                date_obj = datetime.strptime(date_utc_str, "%a %d %b %Y %H:%M:%S +0000") \
+                    .replace(tzinfo=pytz.UTC).astimezone(tz=todoist_tz).date()
             except Exception as err:
                 log.exception(err)
             return date_obj
