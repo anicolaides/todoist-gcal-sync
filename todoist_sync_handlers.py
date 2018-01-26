@@ -64,6 +64,7 @@ class TodoistSync:
         chore_label = False
         errand_label = False
         programming_label = False
+        url_found = False
 
         task_labels = todoist_item['labels']
         if task_labels:
@@ -149,11 +150,14 @@ class TodoistSync:
             event_name += '🍿 '
 
         # detect url in todoist task name
-        url = urlparse(todoist_item['content'])
-        if url.scheme:
-            # use article or website name as event name for task
-            event_name += '🌐 ' + todoist_item['content'].split('(')[1].strip(')')
-        else:
+        if '(' and ')' in todoist_item['content']:
+            url = urlparse(todoist_item['content'])
+            if url.scheme:
+                url_found = True
+                # use article or website name as event name for task
+                event_name += '🌐 ' + todoist_item['content'].split('(')[1].strip(')')
+
+        if not url_found:
             event_name += todoist_item['content']
 
         temp_name = event_name
@@ -169,8 +173,9 @@ class TodoistSync:
             event_name = priority_icons[3].strip() + ' ' + temp_name
 
         if not completed_task:
+            todoist_tz = pytz.timezone(self.timezone())
             item_due_date = self.__todoist.__todoist_utc_to_date__(todoist_item['due_date_utc'])
-            difference = (item_due_date - datetime.today().date()).days
+            difference = (item_due_date - datetime.now(todoist_tz).date()).days
 
             if difference < 0:
                 # overdue task
@@ -200,6 +205,7 @@ class TodoistSync:
         return desc
 
     def overdue(self):
+        log.info('Overdue function was run.')
         table_exists = True
         conn = sqlite3.connect('db/data.db')
 
@@ -221,11 +227,12 @@ class TodoistSync:
                         task_due_date = self.__todoist.__todoist_utc_to_date__(
                             not_overdue_tasks[task][0])
 
-                        local = pytz.timezone(self.timezone())
-                        todays_date_utc = datetime.now(local).astimezone(pytz.utc).date()
-                        difference = (task_due_date - todays_date_utc).days
+                        todoist_tz = pytz.timezone(self.timezone())
+                        date_in_todoist_tz = datetime.now(todoist_tz).date()
+                        difference = (task_due_date - date_in_todoist_tz).days
 
-                        item = self.__todoist.api.items.get_by_id(not_overdue_tasks[task][2])
+                        task_id = not_overdue_tasks[task][2]
+                        item = self.__todoist.api.items.get_by_id(task_id)
 
                         if difference < 0 and item is not None:
                             overdue = True
@@ -249,7 +256,7 @@ class TodoistSync:
                                     # update 'todoist' table to reflect overdue status
                                     try:
                                         c.execute("UPDATE todoist SET overdue = ? WHERE task_id = ?",
-                                            (overdue, not_overdue_tasks[task][2] ,))
+                                            (overdue, task_id ,))
                                         conn.commit()
                                         log.info('Task with id: ' + str(item['id']) + ' has become overdue.')
                                     except sqlite3.OperationalError as err:
@@ -259,11 +266,30 @@ class TodoistSync:
                                 else:
                                     log.error('ERROR:  + overdue()')
 
+                            # keeps times_overdue up-to-date
+                            c.execute("SELECT times_overdue FROM todoist WHERE task_id = ?", \
+                                (task_id,))
+
+                            data = c.fetchone()
+
+                            if data:
+                                times_overdue = data[0]
+
+                                if times_overdue is not None:
+                                    times_overdue += 1
+                                else:
+                                    times_overdue = 1
+
+                                c.execute("UPDATE todoist SET times_overdue = ? WHERE task_id = ?", \
+                                        (times_overdue, task_id,))
+                                conn.commit()
+
         conn.close()
 
     def date_google(self, calendar_id, new_due_date=None, item_id=None, item_content=None, event_id=None, extended_date=None):
         op_code = False
         overdue = None
+        todoist_tz = pytz.timezone(self.timezone())
 
         conn = sqlite3.connect('db/data.db')
 
@@ -282,13 +308,13 @@ class TodoistSync:
                 # convert new event date to Gcal format
                 if new_due_date:
                     new_event_date = self.__todoist.__todoist_utc_to_date__(new_due_date)
-                    difference = (new_event_date - datetime.today().date()).days
+                    difference = (new_event_date - datetime.now(todoist_tz).date()).days
                     new_event_date = self.__todoist.__date_to_google_format__(new_event_date)
 
                 # convert extended date to Gcal format
                 if extended_date:
                     overdue_due_date = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
-                    difference = (overdue_due_date - datetime.today().date()).days
+                    difference = (overdue_due_date - datetime.now(todoist_tz).date()).days
 
                     extended_date1 = self.__todoist.__todoist_utc_to_date__(str(extended_date))
                     extended_date1 = self.__todoist.__date_to_google_format__(extended_date1)
@@ -358,8 +384,8 @@ class TodoistSync:
                     difference = (task_due_date_utc - todays_date_utc).days
 
                     if difference >= 0:
-                        datetime_todoist_frmt = datetime.now(local).replace(hour=23, minute=59, \
-                            second=59).strftime("%a %d %b %Y %H:%M:%S +0000")
+                        datetime_todoist_frmt = datetime.now(pytz.UTC).replace(hour=21, minute=59, second=59) \
+                            .strftime("%a %d %b %Y %H:%M:%S +0000")
 
                         # move event to today's day using the self.__gcal.date_google which will
                         # also update the 'todoist' table with the new due date
@@ -376,7 +402,7 @@ class TodoistSync:
                         extended = None
                         utc_datetime = datetime.now(local)
                         utc_datetime = utc_datetime.astimezone (pytz.utc)
-                        utc_datetime = utc_datetime.replace(hour=23, minute=59, second=59)
+                        utc_datetime = utc_datetime.replace(hour=21, minute=59, second=59)
                         extended = utc_datetime
 
                         # extend duration of event before ticking it
@@ -404,10 +430,10 @@ class TodoistSync:
             if op_code:
                 c.execute('''CREATE TABLE IF NOT EXISTS todoist_completed
                     (project_id integer, parent_project_id integer, task_id integer, due_date text,
-                    event_id integer, overdue integer)''')
+                    event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer)''')
 
                 c.execute('''SELECT project_id integer, parent_project_id integer, task_id integer,
-                    due_date text, event_id integer, overdue integer FROM todoist WHERE task_id = ?''',
+                    due_date text, event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer FROM todoist WHERE task_id = ?''',
                     (task_id,))
 
                 conn.commit()
@@ -416,7 +442,7 @@ class TodoistSync:
 
                 if row_data:
                     # to allow for undo functionality
-                    c.executemany('INSERT INTO todoist_completed VALUES (?,?,?,?,?,?)', (row_data,))
+                    c.executemany('INSERT INTO todoist_completed VALUES (?,?,?,?,?,?,?,?)', (row_data,))
 
                     conn.commit()
 
@@ -441,13 +467,13 @@ class TodoistSync:
 
             c.execute('''CREATE TABLE IF NOT EXISTS todoist
                 (project_id integer, parent_project_id integer, task_id integer, due_date text,
-                event_id integer, overdue integer)''')
+                event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer)''')
 
             # 'todoist_completed' must be created at the same time so that is_complete
             # does not fail at runtime
             c.execute('''CREATE TABLE IF NOT EXISTS todoist_completed
                 (project_id integer, parent_project_id integer, task_id integer, due_date text,
-                event_id integer, overdue integer)''')
+                event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer)''')
 
             include_task = True
             try:
@@ -475,7 +501,8 @@ class TodoistSync:
                     # set overdue task's color to bold red and append a unicode icon to the front
                     task_due_date = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
 
-                    difference = (task_due_date - datetime.today().date()).days
+                    todoist_tz = pytz.timezone(self.timezone())
+                    difference = (task_due_date - datetime.now(todoist_tz).date()).days
                     if difference < 0:
                         # if overdue and p2 --> slip to q1 in Todoist
                         todoist_item = self.__todoist.api.items.get_by_id(item['id'])
@@ -505,9 +532,9 @@ class TodoistSync:
                         item_due_date = completed_due_utc
 
                     todoist_item_info = [item['project_id'], parent_id, item['id'], \
-                        str(item_due_date), event_id, overdue, ]
+                        str(item_due_date), event_id, overdue, None, None ]
 
-                    c.executemany('INSERT INTO todoist VALUES (?,?,?,?,?,?)', (todoist_item_info,))
+                    c.executemany('INSERT INTO todoist VALUES (?,?,?,?,?,?,?,?)', (todoist_item_info,))
                     conn.commit()
 
                     op_code = True
@@ -583,7 +610,7 @@ class TodoistSync:
                 data_row = c.fetchone()
 
             if data_row:
-                c.executemany('INSERT INTO todoist VALUES (?,?,?,?,?,?)',(data_row,))
+                c.executemany('INSERT INTO todoist VALUES (?,?,?,?,?,?,?,?)',(data_row,))
 
                 conn.commit()
 
@@ -629,7 +656,7 @@ class TodoistSync:
             Compose the event location for each event added to Gcal.
         """
 
-        event_location = None
+        event_location = ''
         if self.__todoist.premium_user:
             try:
                 task_notes = self.__todoist.api.items.get(task_id)['notes']
@@ -643,13 +670,16 @@ class TodoistSync:
 
         if item is not None and task_id:
             parent_id = self.__todoist.__parent_project_id__(item['project_id'])
+            if parent_id is None:
+                log.error("Todoist error: 'parent_id' of project " + str(item['project_id']) \
+                + " is set to None.")
 
             # find the child project the task resides in
-            project_of_item = self.__todoist.api.projects.get_by_id(
-                item['project_id'])
-            if project_of_item != None and project_of_item['indent'] != 1:
-                event_location += self.__todoist.api.projects.get_by_id(
-                    parent_id)['name'] + ', ' + project_of_item['name']
+            project_of_item = self.__todoist.api.projects.get_by_id(item['project_id'])
+
+            if parent_id and project_of_item != None and project_of_item['indent'] != 1:
+                event_location += self.__todoist.api.projects.get_by_id(parent_id)['name'] \
+                    + ', ' + project_of_item['name']
             elif project_of_item != None and project_of_item['indent'] == 1:
                 event_location += project_of_item['name']
             parent_of_task = self.__todoist.api.items.get_by_id(item['id'])
