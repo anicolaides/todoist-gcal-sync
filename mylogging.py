@@ -5,6 +5,7 @@ Author: Alexandros Nicolaides
 Dependencies:
 """
 
+import os
 import logging
 import logging.config
 import logging.handlers
@@ -12,6 +13,13 @@ import time
 import queue
 import json
 import atexit
+
+logging_dir = 'logs'
+if not os.path.exists(logging_dir):
+    try:
+        os.mkdir(logging_dir)
+    except FileExistsError as err:
+        pass
 
 my_queue = queue.Queue(-1)
 
