@@ -21,19 +21,19 @@ import urllib3
 def folder_higherarchy():
     """ Building the folder higherarchy of the daemon. """
 
-    dirs_to_be = ['credentials', 'config', 'logs', 'db']
+    dirs = ['credentials', 'config', 'logs', 'db']
 
-    for dir_name in dirs_to_be:
-        if not os.path.exists(dir_name):
+    for directory in dirs:
+        if not os.path.exists(directory):
             try:
-                os.mkdir(dir_name)
+                os.mkdir(directory)
             except FileExistsError as err:
                 log.critical(err)
-                log.warning('Could not create dir with name \'' + dir_name + '\'.')
-            log.info('Directory with name \'' + dir_name + '\' has been successfully created.')
+                log.warning('Could not create dir with name \'' + directory + '\'.')
+            log.info('Directory with name \'' + directory + '\' has been successfully created.')
 
 def self_cleanup(gcal_obj):
-    """ Erases the data of the app. """
+    """ Erases the data of the daemon. """
 
     db_path = 'db/data.db'
     reset_file = 'reset_daemon'
@@ -55,7 +55,6 @@ def self_cleanup(gcal_obj):
             log.exception(err)
 
 def main():
-    folder_higherarchy()
     my_gcal = gcal.Gcal()
 
     if os.path.exists('reset_daemon'):
@@ -63,10 +62,10 @@ def main():
 
     my_todoist = todo.Todoist(load_cfg.USER_PREFS)
 
-    # set python timezone to todoist time
-    #os.environ['TZ'] = my_todoist.todoist_user_tz
+    # set python timezone to todoist time, for schedule module to work properly
+    os.environ['TZ'] = my_todoist.todoist_user_tz
 
-    #time.tzset()
+    time.tzset()
 
     my_todoist.sync.overdue()
 
@@ -91,5 +90,6 @@ def main():
         log.debug('Keyboard interrupt.')
 
 if __name__ == "__main__":
+    folder_higherarchy()
     log = logging.getLogger(__name__)
     main()
