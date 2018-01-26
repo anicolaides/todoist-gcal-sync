@@ -28,8 +28,7 @@ class Gcal:
 
     # 'cache_discovery=False' is used to circumvent the file_cache issue for oauth2client >= 4.0.0
     # More info on the issue here: https://github.com/google/google-api-python-client/issues/299
-    service = discovery.build('calendar', 'v3', http=http, \
-        developerKey='ENTER YOUR DEVELOPER KEY HERE', cache_discovery=False)
+    service = discovery.build('calendar', 'v3', http=http, cache_discovery=False)
 
     def __init__(self, todoist_obj_ref=None):
         self.sync = GcalSync(self)
