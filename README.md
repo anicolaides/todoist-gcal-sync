@@ -93,6 +93,11 @@ python3 daemon.py --noauth_local_webserver
 python3 daemon.py
 ```
 
+### How to run the daemon in the background
+```shell
+nohup python3 -u ./daemon.py > /dev/null 2>&1&
+```
+
 ## How to reset the daemon
 
 ```shell
