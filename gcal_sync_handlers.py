@@ -49,10 +49,10 @@ class GcalSync:
 
         return expo_backoff
 
-    @backoff.on_exception(backoff.expo,
+    """@backoff.on_exception(backoff.expo,
                       requests.exceptions.HTTPError,
                       max_tries=10,
-                      giveup=fatal_code)
+                      giveup=fatal_code)"""
     def cal_id(self, cal_id, sync_token):
         """
             Syncs each calendar using the "gcal_ids" table of the database.
@@ -62,10 +62,12 @@ class GcalSync:
         while True:
             http_error = True
             events = None
-            # no try-catch block used, becuase of expo backoff decorator
-            events = self.__gcal.service.events().list(calendarId=cal_id, pageToken=page_token,\
-                syncToken=sync_token, showDeleted=True).execute()
-            http_error = False
+            try:
+                events = self.__gcal.service.events().list(calendarId=cal_id, pageToken=page_token,\
+                    syncToken=sync_token, showDeleted=True).execute()
+                http_error = False
+            except Exception as err:
+                log.error(err)
 
             if events is not None and not http_error:
                 if 'nextSyncToken' in events:
@@ -116,10 +118,12 @@ class GcalSync:
                             log.info('Task: ' + str(task_id)  + ' has been deleted from Gcal and from Todoist.')
                     elif event['updated']:
                         # no try-catch block used, becuase of expo backoff decorator
-                        new_event_date = event['start']['date']
-                        if task_id is not None:
-                            self.__gcal.todoist.update_task_due_date(cal_id, event['id'], task_id, new_event_date)
-
+                        try:
+                            new_event_date = event['start']['date']
+                            if task_id is not None:
+                                self.__gcal.todoist.update_task_due_date(cal_id, event['id'], task_id, new_event_date)
+                        except Exception as err:
+                            log.error(err)
                 page_token = events.get('nextPageToken')
             if not page_token:
                 break
