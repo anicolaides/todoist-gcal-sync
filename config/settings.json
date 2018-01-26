@@ -42,7 +42,9 @@
     // TODO...
     "icons.prioritySet1": ["１", "２", "３", "４"],
     "icons.prioritySet2": ["①", "②", "③", "④"],
-    "icons.eventSet": ["１", "２", "３", "４", "⚠", "⚛️", "📖", "🚗", "📺", "🐞", "📟", "⚙️",
+    // todoist_sync_handlers.py:event_name and gcal_sync_handlders.py:cal_id depend on this
+    // thus, icons used by todoist_sync_handlers.py:event_name func must be up-to-date with icons below
+    "icons.eventSet": ["１", "２", "３", "４", "⚠", "🔄", "⚛️", "📖", "🚗", "📺", "🐞", "📟", "⚙️",
         "🚀", "🚧", "💠", "🕹", "☎️", "🗑️", "👨‍💻", "❓", "💈", "🛒", "🎫",
          "🔎", "💵", "🍳", "🌐", "🔔", "📧", "📬", "🗓", "🏦", "🏠", "🍿"]
 }
