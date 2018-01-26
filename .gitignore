@@ -1,1 +1,13 @@
+# Sensitive information
+/credentials
+/db
+/logs
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Other
 .DS_Store
+
