@@ -90,6 +90,6 @@ def main():
         log.debug('Keyboard interrupt.')
 
 if __name__ == "__main__":
-    folder_higherarchy()
     log = logging.getLogger(__name__)
+    folder_higherarchy()
     main()
