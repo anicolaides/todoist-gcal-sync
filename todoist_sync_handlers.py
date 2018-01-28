@@ -373,7 +373,7 @@ class TodoistSync:
         conn.close()
         return op_code
 
-    def checked(self, cal_id, event_id, task_id, completed_task=None):
+    def checked(self, cal_id, event_id, task_id, completed_task=None, old_due_date_utc=None):
         op_code = False
 
         conn = sqlite3.connect('db/data.db')
@@ -385,8 +385,12 @@ class TodoistSync:
                 todoist_item = self.__todoist.api.items.get_by_id(task_id)
 
                 if not completed_task:
-                    task_due_date_utc = self.__todoist.__todoist_utc_to_date__(
-                        todoist_item['due_date_utc'])
+                    if not old_due_date_utc:
+                        task_due_date_utc = self.__todoist.__todoist_utc_to_date__(
+                            todoist_item['due_date_utc'])
+                    else:
+                        task_due_date_utc = self.__todoist.__todoist_utc_to_date__(
+                            old_due_date_utc)
 
                     todoist_tz = pytz.timezone(self.timezone())
                     todays_date_utc = datetime.now(todoist_tz).astimezone(pytz.utc).date()
@@ -441,7 +445,8 @@ class TodoistSync:
                 conn.commit()
 
                 c.execute('''SELECT project_id integer, parent_project_id integer, task_id integer,
-                    due_date text, event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer FROM todoist WHERE task_id = ?''',
+                    due_date text, event_id integer, overdue integer, times_overdue integer,
+                    times_resheduled_on_due_date integer FROM todoist WHERE task_id = ?''',
                     (task_id,))
 
                 row_data = c.fetchone()
@@ -668,7 +673,8 @@ class TodoistSync:
             # move task data back to "todoist" table
             if self.__todoist.is_completed(task_id):
                 c.execute('''SELECT project_id integer, parent_project_id integer, task_id integer,\
-                    due_date text, event_id integer, overdue integer FROM todoist_completed \
+                    due_date text, event_id integer, overdue integer, times_overdue integer, \
+                    times_resheduled_on_due_date integer  FROM todoist_completed \
                     WHERE task_id = ?''',(task_id,))
 
                 data_row = c.fetchone()

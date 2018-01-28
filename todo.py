@@ -470,7 +470,7 @@ class Todoist:
                                 if recurring_task_due_date != changes[i]['due_date_utc']:
                                     if recurring_task_completed:
                                         try:
-                                            if self.sync.checked(calendar_id, event_id, task_id):
+                                            if self.sync.checked(calendar_id, event_id, task_id, recurring_task_due_date):
                                                 log.debug(str(task_id) + ': recurring task was checked.')
                                         except Exception as err:
                                             write_to_db = False
