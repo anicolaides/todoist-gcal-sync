@@ -6,6 +6,7 @@ Dependencies: jsmin
 """
 
 import sys
+import io
 import json
 import logging
 from jsmin import jsmin # allow for json comments
@@ -15,7 +16,7 @@ log = logging.getLogger(__name__)
 def load_settings(file_name):
     """ Loads user preferences from settings.json. """
     try:
-        with open(CFG_DIR + file_name, 'r') as json_file:
+        with io.open(CFG_DIR + file_name, mode='r', encoding="utf-8") as json_file:
             return json.loads(jsmin(json_file.read()))
         log.info('Loading \'' + file_name + '\' was successful.')
     except OSError as err:

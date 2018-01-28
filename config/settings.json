@@ -6,7 +6,8 @@
    "daemon.refreshRateSec": 1.5,
 
    // Aesthetics
-   "appearance.displayRecceringIcon": false,
+   "appearance.displayReccuringIcon": false,
+   "appearance.displayReccuringIconCompleted": false,
 
    // Logging
    "logging" : true,

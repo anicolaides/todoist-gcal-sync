@@ -699,54 +699,53 @@ class Todoist:
     def init_completed_tasks(self):
         conn = sqlite3.connect('db/data.db')
 
-        c = conn.cursor()
+        with conn:
+            c = conn.cursor()
 
-        num_days_ago = (datetime.now() - timedelta(days=self.settings['completed.daysToRetrieve'])).isoformat()
-        completed_task = Todoist.api.completed.get_all(limit=200, since=num_days_ago)['items']
+            completed_task = Todoist.api.completed.get_all(limit=200)['items']
 
-        for k in range(0, len(completed_task)):
-            task_id = None
-            item = None
-            valid_completed_task = True
-            valid_item = True
+            for k in range(0, len(completed_task)):
+                task_id = None
+                item = None
+                valid_completed_task = True
+                valid_item = True
 
-            try:
-                validate(completed_task[k], self.completed_item_scheme)
-            except:
-                valid_completed_task = False
+                try:
+                    validate(completed_task[k], self.completed_item_scheme)
+                except:
+                    valid_completed_task = False
 
-            if valid_completed_task:
-                # Todoist task --> Gcal event adds them to the day they were completed
-                task_id = completed_task[k]['task_id']
+                if valid_completed_task:
+                    # Todoist task --> Gcal event adds them to the day they were completed
+                    task_id = completed_task[k]['task_id']
 
-                item = Todoist.api.items.get(task_id)
-                if item is not None:
-                    try:
-                        item = item['item']
-                        validate(item, self.items_schema)
-                    except:
-                        valid_item = False
+                    item = Todoist.api.items.get(task_id)
+                    if item is not None:
+                        try:
+                            item = item['item']
+                            validate(item, self.items_schema)
+                        except:
+                            valid_item = False
 
-                    try:
-                        if valid_item and item['due_date_utc'] and completed_task[k]['completed_date']:
-                            self.sync.new_task_added(item, completed_task[k]['completed_date'])
+                        try:
+                            if valid_item and item['due_date_utc'] and completed_task[k]['completed_date'] \
+                             and self.sync.new_task_added(item, completed_task[k]['completed_date']):
 
-                            # grab the data from the db to supply them to the sync.checked func
-                            # attempt to retrieve the data for the task using the "todoist" table
-                            c.execute("SELECT project_id, parent_project_id, event_id FROM todoist WHERE task_id = ?",
-                            (task_id,))
+                                # grab the data from the db to supply them to the sync.checked func
+                                # attempt to retrieve the data for the task using the "todoist" table
+                                c.execute("SELECT project_id, parent_project_id, event_id FROM todoist WHERE task_id = ?", \
+                                    (task_id,))
 
-                            task_data = c.fetchone()
-                            if task_data:
-                                event_id = task_data[2]
+                                task_data = c.fetchone()
 
-                                calendar_id = self.find_task_calId(task_data[0], task_data[1])
+                                if task_data:
+                                    event_id = task_data[2]
 
-                                self.sync.checked(calendar_id,event_id,task_id, True)
-                    except Exception as err:
-                        log.exception(err)
+                                    calendar_id = self.find_task_calId(task_data[0], task_data[1])
 
-        conn.close()
+                                    self.sync.checked(calendar_id,event_id,task_id, True)
+                        except Exception as err:
+                            log.exception(err)
 
     ########### Retrieval functions ###########
     def find_cal_id(self, project_id, parent_id):

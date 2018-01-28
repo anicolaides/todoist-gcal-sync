@@ -34,8 +34,10 @@ class Gcal:
         self.sync = GcalSync(self)
         self.todoist = todoist_obj_ref
 
-    def insert_event(self, calId, event_name, datetime=None, location=None, desc=None, \
+    def insert_event(self, calId, event_name, start_datetime=None, end_datetime=None, location=None, desc=None, \
         tz='America/Los_Angeles', color_id=None):
+        if end_datetime is None:
+            end_datetime = start_datetime
 
         """ Inserts event to Google Calendar. """
         event = {
@@ -43,11 +45,11 @@ class Gcal:
             'location': location,
             'description': desc,
             'start': {
-                'date': datetime,
+                'date': start_datetime,
                 'timeZone': tz,
             },
             'end': {
-                'date': datetime,
+                'date': end_datetime,
                 'timeZone': tz,
             },
             "colorId": color_id,

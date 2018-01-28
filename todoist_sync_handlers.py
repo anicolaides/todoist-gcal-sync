@@ -5,7 +5,7 @@ Author: Alexandros Nicolaides
 Dependencies: pytz
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from gcal import Gcal
 import todo
 import sqlite3
@@ -13,6 +13,8 @@ import pytz
 from urllib.parse import urlparse
 import logging
 import load_cfg
+
+import time
 
 log = logging.getLogger(__name__)
 
@@ -50,16 +52,20 @@ class TodoistSync:
         parent_project = self.__todoist.api.projects.get_by_id(
             self.__todoist.__parent_project_id__(todoist_item['project_id']))
         programming_project = False
-        if parent_project['name'].lower() == 'side projects':
-            programming_project = True
+
+        if parent_project:
+            if parent_project['name'].lower() == 'side projects':
+                programming_project = True
 
         event_name = ''
 
         # if reccuring, append a unicode icon showing reccurence to the front of the event name
         # case insensitive comparisson of the keyword 'every'
-        if self.__todoist.settings['appearance.displayRecceringIcon'] \
-            and 'every' in todoist_item['date_string'].lower() and not completed_task:
-            event_name += '🔄 '
+        if self.__todoist.settings['appearance.displayReccuringIcon'] \
+            and 'every' in todoist_item['date_string'].lower():
+            if self.__todoist.settings['appearance.displayReccuringIconCompleted'] \
+            and completed_task or not completed_task:
+                event_name += '🔄 '
 
         chore_label = False
         errand_label = False
@@ -109,45 +115,47 @@ class TodoistSync:
         if programming_project and not programming_label:
             event_name += '👨‍💻 '
 
-        # parsing name of task to append unicode icons
-        if '?' in todoist_item['content']:
-            event_name += '❓ '
-        elif 'haircut' in todoist_item['content'].lower():
-            event_name += '💈 '
-        elif 'order' in todoist_item['content'].lower().split():
-            event_name += '🛒 '
-        elif 'flight' in todoist_item['content'].lower().split() \
-            and 'ticket' in todoist_item['content'].lower().split():
-            event_name += '🎫 '
-        elif 'research' in todoist_item['content'].lower().split() \
-            or 'find' in todoist_item['content'].lower().split() \
-            or 'search' in todoist_item['content'].lower().split():
-            event_name += '🔎 '
-        elif 'pay' in todoist_item['content'].lower().split() \
-            or 'renew' in todoist_item['content'].lower().split() \
-            and project['name'] == 'subscriptions':
-            event_name += '💵 '
-        elif 'meal prep' in todoist_item['content'].lower():
-            event_name += '🍳 '
-        elif 'notification' in todoist_item['content'].lower():
-            event_name += '🔔 '
-        elif 'trash' in todoist_item['content'].lower().split():
-            event_name += '🗑️ '
-        elif 'email' in todoist_item['content'].lower().split():
-            event_name += '📧 '
-        elif 'mailbox' in todoist_item['content'].lower().split():
-            event_name += '📬 '
-        elif 'planning' in todoist_item['content'].lower().split() \
-            or 'plan' in todoist_item['content'].lower().split():
-            event_name += '🗓 '
-        elif 'bank' in todoist_item['content'].lower().split():
-            event_name += '🏦 '
-        elif 'home' in project['name'].lower() and not errand_label and not chore_label:
-            # batching chores
-            event_name += '🏠 '
+        if project and parent_project:
 
-        if 'movies' in parent_project['name'].lower():
-            event_name += '🍿 '
+            # parsing name of task to append unicode icons
+            if '?' in todoist_item['content']:
+                event_name += '❓ '
+            elif 'haircut' in todoist_item['content'].lower():
+                event_name += '💈 '
+            elif 'order' in todoist_item['content'].lower().split():
+                event_name += '🛒 '
+            elif 'flight' in todoist_item['content'].lower().split() \
+                and 'ticket' in todoist_item['content'].lower().split():
+                event_name += '🎫 '
+            elif 'research' in todoist_item['content'].lower().split() \
+                or 'find' in todoist_item['content'].lower().split() \
+                or 'search' in todoist_item['content'].lower().split():
+                event_name += '🔎 '
+            elif 'pay' in todoist_item['content'].lower().split() \
+                or 'renew' in todoist_item['content'].lower().split() \
+                and project['name'] == 'subscriptions':
+                event_name += '💵 '
+            elif 'meal prep' in todoist_item['content'].lower():
+                event_name += '🍳 '
+            elif 'notification' in todoist_item['content'].lower():
+                event_name += '🔔 '
+            elif 'trash' in todoist_item['content'].lower().split():
+                event_name += '🗑️ '
+            elif 'email' in todoist_item['content'].lower().split():
+                event_name += '📧 '
+            elif 'mailbox' in todoist_item['content'].lower().split():
+                event_name += '📬 '
+            elif 'planning' in todoist_item['content'].lower().split() \
+                or 'plan' in todoist_item['content'].lower().split():
+                event_name += '🗓 '
+            elif 'bank' in todoist_item['content'].lower().split():
+                event_name += '🏦 '
+            elif 'home' in project['name'].lower() and not errand_label and not chore_label:
+                # batching chores
+                event_name += '🏠 '
+
+            if 'movies' in parent_project['name'].lower():
+                event_name += '🍿 '
 
         # detect url in todoist task name
         if '(' and ')' in todoist_item['content']:
@@ -195,8 +203,9 @@ class TodoistSync:
         # Set event description to task's comments, along with a delimeter
         if self.__todoist.premium_user:
             try:
-                task_notes = self.__todoist.api.items.get(todoist_item['id'])['notes']
+                task_notes = self.__todoist.api.items.get(todoist_item['id'])
                 if task_notes:
+                    task_notes = task_notes['notes']
                     desc += 'Notes:\n\n'
                     for note in range(0, len(task_notes)):
                         desc += '\t' + task_notes[note]['content'] + '\n\n'
@@ -379,8 +388,8 @@ class TodoistSync:
                     task_due_date_utc = self.__todoist.__todoist_utc_to_date__(
                         todoist_item['due_date_utc'])
 
-                    local = pytz.timezone(self.timezone())
-                    todays_date_utc = datetime.now(local).astimezone(pytz.utc).date()
+                    todoist_tz = pytz.timezone(self.timezone())
+                    todays_date_utc = datetime.now(todoist_tz).astimezone(pytz.utc).date()
                     difference = (task_due_date_utc - todays_date_utc).days
 
                     if difference >= 0:
@@ -395,20 +404,17 @@ class TodoistSync:
                         except Exception as err:
                             log.error(str(err) + '\nCould not update date of event in Gcal...')
 
-                    # if task was due yesterday and got completed today extend event lenght
+                    # if task was due yesterday and got completed today extend event length
                     # to the next day
                     elif difference < 0:
                         todoist_item = self.__todoist.api.items.get_by_id(task_id)
-                        extended = None
-                        utc_datetime = datetime.now(local)
-                        utc_datetime = utc_datetime.astimezone (pytz.utc)
-                        utc_datetime = utc_datetime.replace(hour=21, minute=59, second=59)
-                        extended = utc_datetime
+                        extended_date_utc = None
+                        extended_date_utc = datetime.now(todoist_tz).astimezone(pytz.utc).replace(hour=21, minute=59, second=59)
 
                         # extend duration of event before ticking it
                         try:
                             self.date_google(cal_id, None, todoist_item['id'], \
-                                todoist_item['content'], event_id, extended)
+                                todoist_item['content'], event_id,  extended_date_utc)
                         except Exception as err:
                             log.error(str(err) + '\nCould not update date of event in Gcal...' )
 
@@ -432,11 +438,11 @@ class TodoistSync:
                     (project_id integer, parent_project_id integer, task_id integer, due_date text,
                     event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer)''')
 
+                conn.commit()
+
                 c.execute('''SELECT project_id integer, parent_project_id integer, task_id integer,
                     due_date text, event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer FROM todoist WHERE task_id = ?''',
                     (task_id,))
-
-                conn.commit()
 
                 row_data = c.fetchone()
 
@@ -449,7 +455,6 @@ class TodoistSync:
                     c.execute('''DELETE FROM todoist WHERE task_id = ?''', (task_id,))
 
                     conn.commit()
-        conn.close()
 
         if op_code:
             # remove popup reminder from event, since the event is completed
@@ -476,73 +481,132 @@ class TodoistSync:
                 event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer)''')
 
             include_task = True
-            try:
-                c.execute("SELECT project_id FROM excluded_ids WHERE project_id = ?", \
-                    (item['project_id'],))
-            except sqlite3.OperationalError:
-                pass
+            if item is not None:
+                if self.__todoist.settings['projects.excluded']:
+                    try:
+                        c.execute("SELECT project_id FROM excluded_ids WHERE project_id = ?", \
+                            (item['project_id'],))
+                    except sqlite3.OperationalError:
+                        pass
 
-            # if project of task is excluded
-            if c.fetchone():
-                include_task = False
+                    # if project of task is excluded
+                    if c.fetchone():
+                        include_task = False
 
-            if include_task and item['due_date_utc'] and not item['checked'] \
-                and item['project_id'] != self.__todoist.inbox_project_id:
-                parent_id = self.__todoist.__parent_project_id__(item['project_id'])
+                # prevent duplicates
+                # if not recurring, check tables "todoist" and "todoist_completed" for task_id
+                if include_task and not 'every' in item['date_string'].lower():
+                    try:
+                        c.execute("SELECT due_date FROM todoist_completed WHERE task_id = ?", \
+                            (item['id'],))
+                    except sqlite3.OperationalError:
+                        pass
 
-                due_date_utc = None
-                colorId = None
-                overdue = None
-
-                # add completed tasks to the date they were completed
-                if not completed_due_utc:
-                    due_date_utc = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
-
-                    # set overdue task's color to bold red and append a unicode icon to the front
-                    task_due_date = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
-
-                    todoist_tz = pytz.timezone(self.timezone())
-                    difference = (task_due_date - datetime.now(todoist_tz).date()).days
-                    if difference < 0:
-                        # if overdue and p2 --> slip to q1 in Todoist
-                        todoist_item = self.__todoist.api.items.get_by_id(item['id'])
-                        todoist_item.update(priority=4)
-                        self.__todoist.api.commit()
-                        colorId = 11
-                        overdue = True
-                else:
-                    due_date_utc = self.__todoist.__todoist_utc_to_date__(completed_due_utc)
-
-                task_event_date = self.__todoist.__date_to_google_format__(due_date_utc)
-                event_location = self.task_path(item['id'])
-                cal_id = self.__todoist.find_cal_id(item['project_id'], parent_id)
-                event_name = self.event_name(item)
-
-                desc = self.event_desc(item)
-
-                # create all-day event for each task
-                try:
-                    event_id = self.__gcal.insert_event(cal_id, event_name, task_event_date, \
-                        event_location, desc, self.__todoist.todoist_user_tz, colorId)
-
-                    item_due_date = None
-                    if not completed_due_utc:
-                        item_due_date = item['due_date_utc']
+                    if c.fetchone():
+                        include_task = False
                     else:
-                        item_due_date = completed_due_utc
+                        try:
+                            c.execute("SELECT due_date FROM todoist WHERE task_id = ?", \
+                                (item['id'],))
+                        except sqlite3.OperationalError:
+                            pass
 
-                    todoist_item_info = [item['project_id'], parent_id, item['id'], \
-                        str(item_due_date), event_id, overdue, None, None ]
+                        if c.fetchone():
+                            include_task = False
 
-                    c.executemany('INSERT INTO todoist VALUES (?,?,?,?,?,?,?,?)', (todoist_item_info,))
-                    conn.commit()
+                # prevent duplicates
+                if include_task:
+                    try:
+                        c.execute("SELECT due_date FROM todoist_completed WHERE task_id = ?", \
+                            (item['id'],))
+                    except sqlite3.OperationalError:
+                        pass
 
-                    op_code = True
-                except Exception as err:
-                    log.exception(err)
-        conn.close()
+                    dates_from_completed = c.fetchall()
+                    if dates_from_completed:
+                        due_date_utc = datetime.strptime(item['due_date_utc'], "%a %d %b %Y %H:%M:%S +0000").date()
+                        for date in dates_from_completed:
+                            date = date[0]
 
-        return op_code
+                            # convert str dates to date objects for comparison
+                            table_date = datetime.strptime(date, "%a %d %b %Y %H:%M:%S +0000").date()
+
+                            if table_date == due_date_utc:
+                                include_task = False
+                                break
+
+                parent_id = self.__todoist.__parent_project_id__(item['project_id'])
+                if include_task and parent_id and item['due_date_utc'] and item['project_id'] != self.__todoist.inbox_project_id:
+                    due_date_utc = None
+                    colorId = None
+                    overdue = None
+                    completed_date_utc = None
+
+                    if not completed_due_utc:
+                        due_date_utc = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
+
+                        # set overdue task's color to bold red and append a unicode icon to the front
+                        task_due_date = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
+
+                        todoist_tz = pytz.timezone(self.timezone())
+                        difference = (task_due_date - datetime.now(todoist_tz).date()).days
+                        if difference < 0:
+                            # if overdue and p2 --> slip to q1 in Todoist
+                            todoist_item = self.__todoist.api.items.get_by_id(item['id'])
+                            todoist_item.update(priority=4)
+                            self.__todoist.api.commit()
+                            colorId = 11
+                            overdue = True
+                    else:
+                        completed_utc = datetime.strptime(completed_due_utc, "%a %d %b %Y %H:%M:%S +0000").date()
+                        task_due_date_utc = datetime.strptime(item['due_date_utc'], "%a %d %b %Y %H:%M:%S +0000").date()
+                        difference = abs((task_due_date_utc - completed_utc).days)
+
+                        # events to be extended
+                        if completed_utc > task_due_date_utc and difference > 0 and difference < 3:
+                            due_date_utc = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
+                            completed_date_utc = self.__todoist.__todoist_utc_to_date__(completed_due_utc)
+
+                            # increment end date by one, for google calendar end date
+                            completed_date_utc = completed_date_utc + timedelta(days=1)
+                        else:
+                            # add completed tasks to the date they were completed
+                            due_date_utc = self.__todoist.__todoist_utc_to_date__(completed_due_utc)
+
+                    event_start_datetime = self.__todoist.__date_to_google_format__(due_date_utc)
+                    if completed_date_utc:
+                        event_end_datetime = self.__todoist.__date_to_google_format__(completed_date_utc)
+                    else:
+                        event_end_datetime = None
+
+                    event_location = self.task_path(item['id'])
+                    cal_id = self.__todoist.find_cal_id(item['project_id'], parent_id)
+                    event_name = self.event_name(item, completed_due_utc)
+                    desc = self.event_desc(item)
+
+                    # create all-day event for each task
+                    try:
+                        event_id = self.__gcal.insert_event(cal_id, event_name, event_start_datetime, \
+                        event_end_datetime, event_location, desc, self.__todoist.todoist_user_tz, colorId)
+
+                        item_due_date = None
+                        if not completed_due_utc:
+                            item_due_date = item['due_date_utc']
+                        else:
+                            item_due_date = completed_due_utc
+
+                        if event_id:
+                            todoist_item_info = [item['project_id'], parent_id, item['id'], \
+                                str(item_due_date), event_id, overdue, None, None ]
+
+                            c.executemany('INSERT INTO todoist VALUES (?,?,?,?,?,?,?,?)', (todoist_item_info,))
+                            conn.commit()
+
+                            op_code = True
+                    except Exception as err:
+                        log.exception(err)
+
+            return op_code
 
     def task_location(self, calendar_id, event_id, task_id, project_id):
         op_code = False
@@ -659,13 +723,12 @@ class TodoistSync:
         event_location = ''
         if self.__todoist.premium_user:
             try:
-                task_notes = self.__todoist.api.items.get(task_id)['notes']
-                if task_notes:
+                task_notes = self.__todoist.api.items.get(task_id)
+                if task_notes and task_notes['notes']:
                     event_location = '✉ '
-                else:
-                    event_location = ''
             except Exception as err:
-                log.exception(err)
+                pass
+
         item = self.__todoist.api.items.get_by_id(task_id)
 
         if item is not None and task_id:
