@@ -13,7 +13,6 @@ import pytz
 from urllib.parse import urlparse
 import logging
 import load_cfg
-
 import time
 
 log = logging.getLogger(__name__)
@@ -529,9 +528,10 @@ class TodoistSync:
 
                     dates_from_completed = c.fetchall()
                     if dates_from_completed:
-                        due_date_utc = datetime.strptime(item['due_date_utc'], "%a %d %b %Y %H:%M:%S +0000").date()
+                        date_utc_str = self.__todoist.date_parser(item['due_date_utc'])
+                        due_date_utc = datetime.strptime(date_utc_str, "%a %d %b %Y %H:%M:%S +0000").date()
                         for date in dates_from_completed:
-                            date = date[0]
+                            date = self.__todoist.date_parser(date[0])
 
                             # convert str dates to date objects for comparison
                             table_date = datetime.strptime(date, "%a %d %b %Y %H:%M:%S +0000").date()

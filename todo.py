@@ -872,6 +872,18 @@ class Todoist:
         """ Utility function to be used with filter for lists. """
         return True if todoist_item['due_date_utc'] else False
 
+    def date_parser(self, date_str, frmt='%a %d %b %Y %H:%M:%S +0000'):
+        """ Utility function to parse and convert a given date to the appropriate format. """
+        converted_date_str = ''
+        if type(date_str) is str:
+            try:
+                datetime_obj = dateutil.parser.parse(date_str)
+                converted_date_str = datetime.strftime(datetime_obj, frmt)
+            except Exception as err:
+                log.exception(err)
+
+        return converted_date_str
+
     def parse_google_date(self, google_date):
         """ Takes in a Todoist task's due date (UTC), and converts it to a normal date. """
         return datetime.strptime(google_date, '%Y-%m-%d')
@@ -883,8 +895,7 @@ class Todoist:
             date_obj = None
             try:
                 # tries to recover from date that may be in the wrong type, using a parser
-                datetime_obj = dateutil.parser.parse(date_utc_str)
-                date_utc_str = datetime.strftime(datetime_obj, '%a %d %b %Y %H:%M:%S +0000')
+                date_utc_str = self.date_parser(date_utc_str)
                 date_obj = datetime.strptime(date_utc_str, "%a %d %b %Y %H:%M:%S +0000") \
                     .replace(tzinfo=pytz.UTC).astimezone(tz=todoist_tz).date()
             except Exception as err:
