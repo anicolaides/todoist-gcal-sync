@@ -11,7 +11,7 @@ import load_cfg
 from googleapiclient import errors
 from gcal_OAuth import get_credentials
 import random
-import requests
+import simplejson
 
 log = logging.getLogger(__name__)
 
@@ -37,8 +37,9 @@ class GcalSync:
                         syncToken=sync_token, showDeleted=True).execute()
                     http_error = False
                     break
-                except requests.exceptions.HTTPError as err:
-                    if any(error_code == err.response.status_code for error_code in [403, 404, 500, 503]):
+                except errors.HttpError as err:
+                    err = simplejson.loads(err.content)
+                    if any(error_code == err['error']['code'] for error_code in [403, 404, 500, 503]):
                         log.debug('Exponential backoff is being applied due to...\n' + str(err))
                         # exponential backoff
                         time.sleep((2 ** n) + random.randint(0, 1000) / 1000)

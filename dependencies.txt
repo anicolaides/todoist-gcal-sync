@@ -1,6 +1,7 @@
 google-api-python-client
 schedule 
 jsmin
+simplejson
 todoist-python 
 pytz 
 jsonschema 
