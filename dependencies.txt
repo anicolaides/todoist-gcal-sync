@@ -1,7 +1,6 @@
 google-api-python-client
 schedule 
-jsmin 
-backoff 
+jsmin
 todoist-python 
 pytz 
 jsonschema 

@@ -7,11 +7,11 @@ Dependencies: backoff
 import time
 import logging
 import requests
-import backoff # exponential backoff
 import load_cfg
 from googleapiclient import errors
 from gcal_OAuth import get_credentials
-
+import random
+import requests
 
 log = logging.getLogger(__name__)
 
@@ -21,38 +21,6 @@ class GcalSync:
     def __init__(self, caller):
         self.__gcal = caller
 
-    def fatal_code(self, e):
-        expo_backoff = True
-
-        if e.response.status_code == 400:
-            """ 400: Bad Request """
-            log.debug(e.response.reason)
-        elif e.response.status_code == 401:
-            """ 401: Invalid Credentials """
-            # re-authenticate using OAuth flow
-            gcal_creds = get_credentials()
-            log.debug("An attempt to re-authenticate using OAuth flow was made, due to a 401 error.")
-        elif e.response.status_code == 403:
-            """ 403: Daily Limit Exceeded """
-            if e.response.reason == 'dailyLimitExceeded':
-                # pause application for 24 hours
-                log.debug("Pausing application for a day, due to '403: Daily Limit Exceeded'.")
-                time.sleep(86400)
-            elif e.response.reason != 'dailyLimitExceeded':
-                expo_backoff = False
-        elif e.response.status_code == 404:
-            """ 404: Not Found """
-            expo_backoff = False
-        elif e.response.status_code  == 500:
-            """ 500: Backend Error """
-            expo_backoff = False
-
-        return expo_backoff
-
-    """@backoff.on_exception(backoff.expo,
-                      requests.exceptions.HTTPError,
-                      max_tries=10,
-                      giveup=fatal_code)"""
     def cal_id(self, cal_id, sync_token):
         """
             Syncs each calendar using the "gcal_ids" table of the database.
@@ -62,12 +30,20 @@ class GcalSync:
         while True:
             http_error = True
             events = None
-            try:
-                events = self.__gcal.service.events().list(calendarId=cal_id, pageToken=page_token,\
-                    syncToken=sync_token, showDeleted=True).execute()
-                http_error = False
-            except Exception as err:
-                log.error(err)
+
+            for n in range(0,5):
+                try:
+                    events = self.__gcal.service.events().list(calendarId=cal_id, pageToken=page_token,\
+                        syncToken=sync_token, showDeleted=True).execute()
+                    http_error = False
+                    break
+                except requests.exceptions.HTTPError as err:
+                    if any(error_code == err.response.status_code for error_code in [403, 404, 500, 503]):
+                        log.debug('Exponential backoff is being applied due to...\n' + str(err))
+                        # exponential backoff
+                        time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
+                    else:
+                        log.error(err)
 
             if events is not None and not http_error:
                 if 'nextSyncToken' in events:
@@ -117,7 +93,6 @@ class GcalSync:
                         if task_id is not None and self.__gcal.todoist.delete_task(task_id):
                             log.info('Task: ' + str(task_id)  + ' has been deleted from Gcal and from Todoist.')
                     elif event['updated']:
-                        # no try-catch block used, becuase of expo backoff decorator
                         try:
                             new_event_date = event['start']['date']
                             if task_id is not None:
