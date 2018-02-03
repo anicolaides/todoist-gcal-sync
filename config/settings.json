@@ -4,6 +4,7 @@
    /* https://developer.todoist.com/sync/v7/#limits
       60s/1.5s = 40 requests/min to prevent Todoist timeouts */
    "daemon.refreshRateSec": 1.5,
+   "daemon.connErrDelaySec": 30,
 
    // Aesthetics
    "appearance.displayReccuringIcon": false,

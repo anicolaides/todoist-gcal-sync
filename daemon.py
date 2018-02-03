@@ -84,6 +84,7 @@ def main():
             requests.exceptions.ReadTimeout, OSError, urllib3.exceptions.ProtocolError, \
             requests.exceptions.ConnectionError, ConnectionResetError) as err:
                 log.warning(err)
+                time.sleep(load_cfg.USER_PREFS['daemon.connErrDelaySec'])
 
             time.sleep(load_cfg.USER_PREFS['daemon.refreshRateSec'])
     except KeyboardInterrupt:
