@@ -14,11 +14,11 @@ The instructions below will help you get the tool up and running.
 *Note*: The daemon has only been tested with unix-based systems and python 3.x.
 
 ### Prerequisites
-For an always up-to-date list of dependencies - see [dependencies.txt](dependencies.txt)
+For an always up-to-date list of dependencies - see [dependencies.txt](/misc/dependencies.txt)
 
 Install dependencies using:
 ```
-pip3 install -r dependencies.txt
+pip3 install -r /misc/dependencies.txt
 ```
 
 ### Installing
@@ -93,11 +93,41 @@ python3 daemon.py --noauth_local_webserver
 python3 daemon.py
 ```
 
-### How to run the daemon in the background
+### How to run the daemon in the background (for testing purposes)
 ```shell
 nohup python3 -u ./daemon.py > /dev/null 2>&1&
 ```
 
+## How to run the daemon as a service (using systemd)
+1. Move and rename the systemd service file.
+   ```shell
+   sudo mv /misc/systemd_service_file /lib/systemd/system/todoist-gcal-sync.service
+   ```
+2. Edit the service file,
+   ```shell
+   sudo vi /lib/systemd/system/todoist-gcal-sync.service
+   ```
+   and change `PATH_TO_CLONED_REPO` to the path of the local copy of this repository on your server.
+
+3. Refresh systemd.
+   ```shell
+   systemctl daemon-reload
+   ```
+
+4. Enable the service, so it persists on reboot.
+   ```shell
+   sudo systemctl enable todoist-gcal-sync.service
+   ```
+
+5. Run the service.
+   ```shell
+   sudo systemctl start todoist-gcal-sync.service
+   ```
+Finally, run the following to confirm the service is up and running:
+   ```shell
+   sudo service todoist-gcal-sync status
+   ```
+_Note: If you had initialized todoist-gcal-sync with a non-root user, you may have to re-initialize the daemon using `python3 daemon.py --noauth_local_webserver` as google creates a credentials folder per user._
 ## How to reset the daemon
 
 ```shell
@@ -113,7 +143,7 @@ _Note: This will erase all calendars and the app's database, then re-initialize 
 3. Run daemon.py.
 
 ## Contributing
-Please feel free to contribute, as the project is still at its infancy. Any help is greatly appreciated.
+Please feel free to contribute as the project is still at its infancy. Any help is greatly appreciated.
 
 ## License
 

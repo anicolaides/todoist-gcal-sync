@@ -1,0 +1,17 @@
+[Unit]
+Description=Todoist <--> Google calendar integration
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=PATH_TO_CLONED_REPO
+ExecStart=/usr/bin/python3 PATH_TO_CLONED_REPO/daemon.py
+Restart=always
+SyslogIdentifier=todoist-gcal-sync
+StandardOutput=null
+KillSignal=SIGINT
+SuccessExitStatus=SIGINT
+
+[Install]
+WantedBy=multi-user.target
+Alias=todoist-gcal-sync.service

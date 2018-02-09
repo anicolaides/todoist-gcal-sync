@@ -205,9 +205,9 @@ class TodoistSync:
                 task_notes = self.__todoist.api.items.get(todoist_item['id'])
                 if task_notes:
                     task_notes = task_notes['notes']
-                    desc += 'Notes:\n\n'
+
                     for note in range(0, len(task_notes)):
-                        desc += '\t' + task_notes[note]['content'] + '\n\n'
+                        desc += task_notes[note]['content'] + '\n\n'
             except Exception as err:
                 log.error(err)
         return desc

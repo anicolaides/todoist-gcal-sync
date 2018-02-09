@@ -17,6 +17,11 @@ import gcal
 import todo
 import requests
 import urllib3
+import signal
+
+def signal_handler(signal, frame):
+    log.critical("todoist-gcal-sync has aborted operation.")
+    sys.exit()
 
 def folder_higherarchy():
     """ Building the folder higherarchy of the daemon. """
@@ -73,24 +78,22 @@ def main():
 
     schedule.every().day.at("00:00").do(my_todoist.sync.overdue)
 
-    try:
-        log.info('Entering syncing mode...')
-        while True:
-            schedule.run_pending()
-            try:
-                my_todoist.sync_todoist()
-                my_gcal.sync_gcal()
-            except (TimeoutError, urllib3.exceptions.ReadTimeoutError, \
-            requests.exceptions.ReadTimeout, OSError, urllib3.exceptions.ProtocolError, \
-            requests.exceptions.ConnectionError, ConnectionResetError) as err:
-                log.warning(err)
-                time.sleep(load_cfg.USER_PREFS['daemon.connErrDelaySec'])
+    log.info('Entering syncing mode...')
+    while True:
+        schedule.run_pending()
+        try:
+            my_todoist.sync_todoist()
+            my_gcal.sync_gcal()
+        except (TimeoutError, urllib3.exceptions.ReadTimeoutError, \
+        requests.exceptions.ReadTimeout, OSError, urllib3.exceptions.ProtocolError, \
+        requests.exceptions.ConnectionError, ConnectionResetError) as err:
+            log.warning(err)
+            time.sleep(load_cfg.USER_PREFS['daemon.connErrDelaySec'])
 
-            time.sleep(load_cfg.USER_PREFS['daemon.refreshRateSec'])
-    except KeyboardInterrupt:
-        log.debug('Keyboard interrupt.')
+        time.sleep(load_cfg.USER_PREFS['daemon.refreshRateSec'])
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
     log = logging.getLogger(__name__)
     folder_higherarchy()
     main()
