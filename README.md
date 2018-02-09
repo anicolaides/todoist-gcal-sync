@@ -1,4 +1,4 @@
-# todoist_gcal_sync
+# todoist-gcal-sync
 Bi-directional syncing between Todoist and Google Calendar
 
 
