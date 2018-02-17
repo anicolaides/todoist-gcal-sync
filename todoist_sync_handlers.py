@@ -31,32 +31,22 @@ class TodoistSync:
     def task_name(self, calendar_id, event_id, task_id):
         op_code = False
 
-        conn = sqlite3.connect('db/data.db')
+        item = self.__todoist.api.items.get_by_id(task_id)
 
-        with conn:
-            c = conn.cursor()
+        if item is not None and item['content']:
+            event_name = self.event_name(item)
 
-            item = self.__todoist.api.items.get_by_id(task_id)
-
-            if item is not None and item['content']:
-                event_name = self.event_name(item)
-
-                if self.__gcal.update_event_date(calendar_id, event_id, None, event_name, None):
-                    op_code = True
-        conn.close()
+            if self.__gcal.update_event_date(calendar_id, event_id, None, event_name, None):
+                op_code = True
 
         return op_code
 
     def event_name(self, todoist_item, completed_task=None):
         parent_project = self.__todoist.api.projects.get_by_id(
             self.__todoist.__parent_project_id__(todoist_item['project_id']))
-        programming_project = False
-
-        if parent_project:
-            if parent_project['name'].lower() == 'side projects':
-                programming_project = True
-
+        project = self.__todoist.api.projects.get_by_id(todoist_item['project_id'])
         event_name = ''
+        icons_cfg = load_cfg.ICONS
 
         # if reccuring, append a unicode icon showing reccurence to the front of the event name
         # case insensitive comparisson of the keyword 'every'
@@ -64,97 +54,51 @@ class TodoistSync:
             and 'every' in todoist_item['date_string'].lower():
             if self.__todoist.settings['appearance.displayReccuringIconCompleted'] \
             and completed_task or not completed_task:
-                event_name += '🔄 '
+                event_name += icons_cfg['icons.basic']['recurring'] + ' '
 
-        chore_label = False
-        errand_label = False
-        programming_label = False
         url_found = False
 
+        # appends icons based on task labels
         task_labels = todoist_item['labels']
         if task_labels:
-            for label in task_labels:
-                if label == self.__todoist.deep_label_id:
-                    event_name += '⚛️ '
-                elif label == self.__todoist.reading_label_id and not programming_project:
-                    event_name += '📖 '
-                elif label == self.__todoist.errand_label_id:
-                    errand_label = True
-                    event_name += '🚗 '
-                elif label == self.__todoist.watching_label_id:
-                    event_name += '📺 '
-                elif label == self.__todoist.debugging_label_id:
-                    programming_label = True
-                    event_name += '🐞 '
-                elif label == self.__todoist.err_handling_label_id:
-                    programming_label = True
-                    event_name += '📟 '
-                elif label == self.__todoist.refactoring_label_id:
-                    programming_label = True
-                    event_name += '️⚙️ '
-                elif label == self.__todoist.optimization_label_id:
-                    programming_label = True
-                    event_name += '🚀 '
-                elif label == self.__todoist.functionality_label_id:
-                    programming_label = True
-                    event_name += '🚧 '
-                elif label == self.__todoist.add_on_label_id:
-                    event_name += '💠 '
-                elif label == self.__todoist.testing_label_id:
-                    programming_label = True
-                    event_name += '🕹 '
-                elif label == self.__todoist.phone_label_id:
-                    event_name += '☎️ '
-                elif label == self.__todoist.chore_label_id:
-                    chore_label = True
-                    event_name += '🗑️ '
-
-        # by project name
-        project = self.__todoist.api.projects.get_by_id(todoist_item['project_id'])
-        if programming_project and not programming_label:
-            event_name += '👨‍💻 '
+            for label_id in task_labels:
+                for icon_group in icons_cfg['icons.labels']:
+                    for label_name in icons_cfg['icons.labels'][icon_group]:
+                        if label_id == self.__todoist.find_label_id(label_name):
+                            event_name += icons_cfg['icons.labels'][icon_group][label_name] + ' '
 
         if project and parent_project:
+            parsed_icon = False
+            # appends icons based on context of task name, using a parser
+            for category in icons_cfg['icons.parser']:
+                if category == "general":
+                    for keyword in icons_cfg['icons.parser'][category]:
+                        if keyword in todoist_item['content'].lower().split():
+                            event_name += icons_cfg['icons.parser'][category][keyword] + ' '
+                            parsed_icon = True
+                else:
+                    for i in range(0, len(icons_cfg['icons.parser'][category])):
+                        keys = icons_cfg['icons.parser'][category][i]['keywords']
+                        if any(keyword in todoist_item['content'].lower().split() for keyword in keys):
+                            if category == 'or_and_project':
+                                if icons_cfg['icons.parser'][category][i]['project_name'] == project['name'].lower():
+                                    event_name += icons_cfg['icons.parser'][category][i]['icon'] + ' '
+                                    parsed_icon = True
+                            else:
+                                event_name += icons_cfg['icons.parser'][category][i]['icon'] + ' '
+                                parsed_icon = True
 
-            # parsing name of task to append unicode icons
-            if '?' in todoist_item['content']:
-                event_name += '❓ '
-            elif 'haircut' in todoist_item['content'].lower():
-                event_name += '💈 '
-            elif 'order' in todoist_item['content'].lower().split():
-                event_name += '🛒 '
-            elif 'flight' in todoist_item['content'].lower().split() \
-                and 'ticket' in todoist_item['content'].lower().split():
-                event_name += '🎫 '
-            elif 'research' in todoist_item['content'].lower().split() \
-                or 'find' in todoist_item['content'].lower().split() \
-                or 'search' in todoist_item['content'].lower().split():
-                event_name += '🔎 '
-            elif 'pay' in todoist_item['content'].lower().split() \
-                or 'renew' in todoist_item['content'].lower().split() \
-                and project['name'] == 'subscriptions':
-                event_name += '💵 '
-            elif 'meal prep' in todoist_item['content'].lower():
-                event_name += '🍳 '
-            elif 'notification' in todoist_item['content'].lower():
-                event_name += '🔔 '
-            elif 'trash' in todoist_item['content'].lower().split():
-                event_name += '🗑️ '
-            elif 'email' in todoist_item['content'].lower().split():
-                event_name += '📧 '
-            elif 'mailbox' in todoist_item['content'].lower().split():
-                event_name += '📬 '
-            elif 'planning' in todoist_item['content'].lower().split() \
-                or 'plan' in todoist_item['content'].lower().split():
-                event_name += '🗓 '
-            elif 'bank' in todoist_item['content'].lower().split():
-                event_name += '🏦 '
-            elif 'home' in project['name'].lower() and not errand_label and not chore_label:
-                # batching chores
-                event_name += '🏠 '
+            # if the parser above has not added any icon
+            if not parsed_icon:
+                # by project name
+                for label in icons_cfg['icons.projects']:
+                    if label == project['name'].lower():
+                        event_name += icons_cfg['icons.projects'][label] + ' '
 
-            if 'movies' in parent_project['name'].lower():
-                event_name += '🍿 '
+                # by parent project name
+                for label in icons_cfg['icons.parentProjects']:
+                    if label == parent_project['name'].lower():
+                        event_name += icons_cfg['icons.parentProjects'][label] + ' '
 
         # detect url in todoist task name
         if '(' and ')' in todoist_item['content']:
@@ -162,13 +106,13 @@ class TodoistSync:
             if url.scheme:
                 url_found = True
                 # use article or website name as event name for task
-                event_name += '🌐 ' + todoist_item['content'].split('(')[1].strip(')')
+                event_name += icons_cfg['icons.basic']['url'] + ' ' + todoist_item['content'].split('(')[1].strip(')')
 
         if not url_found:
             event_name += todoist_item['content']
 
         temp_name = event_name
-        priority_icons = load_cfg.USER_PREFS['icons.prioritySet1']
+        priority_icons = load_cfg.ICONS['icons.prioritySet1']
 
         if todoist_item['priority'] == 4:  # Red flag in Todoist
             event_name = priority_icons[0].strip() + ' ' + temp_name
@@ -186,7 +130,7 @@ class TodoistSync:
 
             if difference < 0:
                 # overdue task
-                event_name = '⚠ ' + event_name
+                event_name = icons_cfg['icons.basic']['overdue'] + ' ' + event_name
 
         return event_name
 
@@ -633,9 +577,6 @@ class TodoistSync:
             # if we have a new project_id, we may have a new parent_project_id as well
             # either the project_id or the parent_project_id or both are different
             if not data:
-                item = self.__todoist.api.items.get_by_id(task_id)
-
-                project_of_item = self.__todoist.api.projects.get_by_id(project_id)
                 event_location = self.task_path(task_id)
 
                 cal_id = self.__todoist.find_cal_id(project_id, parent_project_id)
@@ -700,8 +641,8 @@ class TodoistSync:
                 # sync date because if it was overdue and was stetched it won't go back to normal just like that
                 try:
                     item = self.__todoist.api.items.get_by_id(task_id)
-                    if item is not None and self.date_google(calendar_id, item['due_date_utc'], task_id, item['content'], data_row[4]):
-                        write_to_db = True
+                    if item is not None:
+                        self.date_google(calendar_id, item['due_date_utc'], task_id, item['content'], data_row[4])
                 except Exception as err:
                     log.exception(str(err) + 'Could not update date of event in Gcal...')
 
@@ -733,7 +674,7 @@ class TodoistSync:
                 if task_notes and task_notes['notes']:
                     event_location = '✉ '
             except Exception as err:
-                pass
+                log.debug(err)
 
         item = self.__todoist.api.items.get_by_id(task_id)
 

@@ -27,70 +27,8 @@ class Todoist:
 
     api = todoist.TodoistAPI(todoist_auth.todoist_api_token)
 
-    def __init__(self, settings):
-        self.sync_error_schema =  {
-            'error': {"type": "string"},
-            'error_code': {"type": "integer"},
-            'error_extra': "object",
-            'error_tag': {"type": "string"},
-            'http_code': {"type": "integer"}
-        }
-        self.completed_item_scheme = {
-            "type": "object",
-            "user_id": {"type": "integer"},
-            "task_id": {"type": "integer"},
-            "completed_date": {"type": "string"},
-            "content": {"type": "string"},
-            "project_id": {"type": "integer"},
-            "note_count": {"type": "integer"},
-            "properties": {
-                "id": {"type": "integer"}
-            }
-        }
-        self.items_schema = {
-            "type": "object",
-            "user_id": {"type": "number"},
-            "project_id": {"type": "number"},
-            "content": {"type": "string"},
-            "date_string": {"type": "string"},
-            "date_lang": {"type": "string"},
-            "due_date_utc": {"type": "string"},
-            "indent": {"type": "number"},
-            "priority": {"type": "number"},
-            "item_order": {"type": "number"},
-            "day_order": {"type": "number"},
-            "collapsed": {"type": "number"},
-            "labels": {"type": "array"},
-            "assigned_by_uid": {"type": "number"},
-            "responsible_uid": {"type": "number"},
-            "checked": {"type": "number"},
-            "in_history": {"type": "number"},
-            "is_deleted": {"type": "number"},
-            "is_archived": {"type": "number"},
-            "sync_id": {"type": "number"},
-            "date_added": {"type": "string"}
-            }
-
-        self.sync_schema = {
-            "type": "object",
-            "collaborator_states" : {"type" : "array"},
-            "projects": {"type" : "array"},
-            "labels": {"type" : "array"},
-            "sync_token": {"type" : "string"},
-            "full_sync": {"type" : "boolean"},
-            "filters": {"type" : "array"},
-            "items": {"type" : "array"},
-            "notes": {"type" : "array"},
-            "reminders": {"type" : "array"},
-            "collaborators": {"type" : "array"},
-            "live_notifications_last_read_id": {"type" : "number"},
-            "day_orders_timestamp": {"type" : "string"},
-            "live_notifications": {"type" : "array"},
-            "temp_id_mapping": {"type" : "object"},
-            "project_notes": {"type" : "array"},
-            "day_orders": {"type" : "object"},
-            "required": ["sync_token", "items"]
-        }
+    def __init__(self, settings, todoist_schema):
+        self.todoist_schema = todoist_schema
         self.settings = settings
         self.gcal = Gcal(self)
         initial_sync = Todoist.api.sync() # needed to initialize 3 vars below
@@ -100,20 +38,7 @@ class Todoist:
         self.inbox_project_id = Todoist.api.user.state['user']['inbox_project']
         self.changed_location_of_event = None
 
-        """ Labels of Todoist codes. """
-        self.chore_label_id = self.find_label_id('chore')
-        self.deep_label_id = self.find_label_id('deep')
-        self.reading_label_id = self.find_label_id('reading')
-        self.errand_label_id = self.find_label_id('errand')
-        self.phone_label_id = self.find_label_id('phone')
-        self.watching_label_id = self.find_label_id('watching')
-        self.debugging_label_id = self.find_label_id('debugging')
-        self.err_handling_label_id = self.find_label_id('err_handling')
-        self.refactoring_label_id = self.find_label_id('refactoring')
-        self.optimization_label_id = self.find_label_id('optimization')
-        self.functionality_label_id = self.find_label_id('functionality')
-        self.testing_label_id = self.find_label_id('testing')
-        self.add_on_label_id = self.find_label_id('add-on')
+        # TODO: add icons to be assiciated with labels variable
 
         # if db exists, skip first time initialization
         if os.path.exists('db/data.db'):
@@ -599,7 +524,6 @@ class Todoist:
 
                 if json_data:
                     last_sync = json_data[0]
-                    last_token = json_data[1]
 
                     last_sync_json = json.loads(last_sync)
             except Exception as err:
@@ -711,7 +635,7 @@ class Todoist:
                 valid_item = True
 
                 try:
-                    validate(completed_task[k], self.completed_item_scheme)
+                    validate(completed_task[k], self.todoist_schema['completed_item'])
                 except:
                     valid_completed_task = False
 
@@ -723,7 +647,7 @@ class Todoist:
                     if item is not None:
                         try:
                             item = item['item']
-                            validate(item, self.items_schema)
+                            validate(item, self.todoist_schema['items'])
                         except:
                             valid_item = False
 
@@ -855,13 +779,13 @@ class Todoist:
         sync_schema_valid = True
         sync_err_schema_valid = True
         try:
-            validate(sync_response, self.sync_schema)
+            validate(sync_response, self.todoist_schema['sync'])
         except exceptions.ValidationError as err:
             sync_schema_valid = False
-            log.debug("Failed to validate Todoist's sync schema.")
+            log.debug(err)
 
             try:
-                validate(sync_response, self.sync_error_schema)
+                validate(sync_response, self.todoist_schema['http_error'])
             except exceptions.ValidationError as err:
                 sync_err_schema_valid = False
 

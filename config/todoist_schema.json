@@ -1,1 +1,64 @@
-TODO
+{
+    "http_error": {
+        "error": {"type": "string"},
+        "error_code": {"type": "integer"},
+        "error_extra": "object",
+        "error_tag": {"type": "string"},
+        "http_code": {"type": "integer"}
+    },
+    "completed_item": {
+        "type": "object",
+        "user_id": {"type": "integer"},
+        "task_id": {"type": "integer"},
+        "completed_date": {"type": "string"},
+        "content": {"type": "string"},
+        "project_id": {"type": "integer"},
+        "note_count": {"type": "integer"},
+        "properties": {
+            "id": {"type": "integer"}
+        }
+    },
+    "items": {
+        "type": "object",
+        "user_id": {"type": "number"},
+        "project_id": {"type": "number"},
+        "content": {"type": "string"},
+        "date_string": {"type": "string"},
+        "date_lang": {"type": "string"},
+        "due_date_utc": {"type": "string"},
+        "indent": {"type": "number"},
+        "priority": {"type": "number"},
+        "item_order": {"type": "number"},
+        "day_order": {"type": "number"},
+        "collapsed": {"type": "number"},
+        "labels": {"type": "array"},
+        "assigned_by_uid": {"type": "number"},
+        "responsible_uid": {"type": "number"},
+        "checked": {"type": "number"},
+        "in_history": {"type": "number"},
+        "is_deleted": {"type": "number"},
+        "is_archived": {"type": "number"},
+        "sync_id": {"type": "number"},
+        "date_added": {"type": "string"}
+    },
+    "sync": {
+        "type": "object",
+        "collaborator_states" : {"type" : "array"},
+        "projects": {"type" : "array"},
+        "labels": {"type" : "array"},
+        "sync_token": {"type" : "string"},
+        "full_sync": {"type" : "boolean"},
+        "filters": {"type" : "array"},
+        "items": {"type" : "array"},
+        "notes": {"type" : "array"},
+        "reminders": {"type" : "array"},
+        "collaborators": {"type" : "array"},
+        "live_notifications_last_read_id": {"type" : "number"},
+        "day_orders_timestamp": {"type" : "string"},
+        "live_notifications": {"type" : "array"},
+        "temp_id_mapping": {"type" : "object"},
+        "project_notes": {"type" : "array"},
+        "day_orders": {"type" : "object"},
+        "required": ["sync_token", "items"]
+    }
+}

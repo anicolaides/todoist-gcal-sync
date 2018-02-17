@@ -1,6 +1,6 @@
 """
 File: load_cfg.py
-Purpose: Load settings.json.
+Purpose: Load project's JSON files.
 Author: Alexandros Nicolaides
 Dependencies: jsmin
 """
@@ -26,3 +26,5 @@ def load_settings(file_name):
 
 CFG_DIR = 'config/'
 USER_PREFS = load_settings('settings.json')
+TODOIST_SCHEMA = load_settings('todoist_schema.json')
+ICONS = load_settings('icons.json')

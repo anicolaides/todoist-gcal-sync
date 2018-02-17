@@ -65,7 +65,7 @@ def main():
     if os.path.exists('reset_daemon'):
         self_cleanup(my_gcal)
 
-    my_todoist = todo.Todoist(load_cfg.USER_PREFS)
+    my_todoist = todo.Todoist(load_cfg.USER_PREFS, load_cfg.TODOIST_SCHEMA)
 
     # set python timezone to todoist time, for schedule module to work properly
     os.environ['TZ'] = my_todoist.todoist_user_tz

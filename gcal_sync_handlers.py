@@ -63,7 +63,7 @@ class GcalSync:
                     last_icon = None
                     event_name_substr = event['summary']
                     for char in event_name_substr.split():
-                        if any(icon == char for icon in load_cfg.USER_PREFS['icons.eventSet']):
+                        if any(icon == char for icon in load_cfg.ICONS['icons.eventSet']):
                             last_icon = char
                     event_name = event['summary'].split(last_icon, 1)[1].strip()
 

@@ -1,0 +1,72 @@
+{
+    // gcal_sync_handlders.py:cal_id depends on this
+    // thus, the icons used in the rest of this file must also be part of the array below
+    // NOTE: this dependency will be removed on future updates
+    "icons.eventSet": ["１", "２", "３", "４", "⚠", "🔄", "⚛️", "📖", "🚗", "📺", "🐞", "📟", "⚙️",
+        "🚀", "🚧", "💠", "🕹", "☎️", "🗑️", "👨‍💻", "❓", "💈", "🛒", "🎫",
+         "🔎", "💵", "🍳", "🌐", "🔔", "📧", "📬", "🗓", "🏦", "🏠", "🍿"],
+    "icons.prioritySet1": ["１", "２", "３", "４"],
+    "icons.prioritySet2": ["①", "②", "③", "④"],
+    "icons.basic": {
+        "overdue": "⚠",
+        "recurring": "🔄",
+        "url": "🌐"
+    },
+    "icons.labels" : {
+        "general":{
+            "deep": "⚛️",
+            "chore": "🗑️",
+            "reading": "📖",
+            "errand": "🚗",
+            "watching": "📺",
+            "phone": "☎️"
+        },
+        "programming":{
+            "debug": "🐞",
+            "err_handl": "📟",
+            "refactor": "⚙️",
+            "optimize": "🚀",
+            "function": "🚧",
+            "test": "🕹",
+            "add-on": "💠"
+        }
+    },
+    "icons.parser" : {
+        "general":{
+            "haircut": "💈",
+            "order": "🛒",
+            "ticket": "🎫",
+            "meal": "🍳",
+            "notification": "🔔",
+            "trash": "🗑️",
+            "email": "📧",
+            "mailbox": "📬",
+            "bank": "🏦"
+        },
+        // if any of the keywords is found
+        "or": [
+            {
+                "keywords":["research", "find", "search"],
+                "icon": "🔎"
+            },
+            {
+                "keywords":["planning", "plan"],
+                "icon": "🗓"
+            }
+        ],
+        // if any of the keywords is found and the task belongs to specific project
+        "or_and_project": [
+            {
+                "keywords": ["pay", "renew"],
+                "project_name": "subscriptions",
+                "icon": "💵"
+            }
+        ]
+    },
+    "icons.projects": {
+        "home": "🏠"
+    },
+    "icons.parentProjects":{
+        "movies": "🍿"
+    }
+}

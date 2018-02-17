@@ -3,7 +3,7 @@
    "todoist_api_token": "",
    /* https://developer.todoist.com/sync/v7/#limits
       60s/1.5s = 40 requests/min to prevent Todoist timeouts */
-   "daemon.refreshRateSec": 1.5,
+   "daemon.refreshRateSec": 1.3,
    "daemon.connErrDelaySec": 30,
 
    // Aesthetics
@@ -13,8 +13,6 @@
    // Logging
    "logging" : true,
    "logging.mailHandler": [],
-
-   // Keywords to be mapped to unicode icons for parser use
 
    // User Preferences
    "projects.excluded": [],
@@ -39,14 +37,5 @@
        {
         "method": "popup",
         "minutes": 300
-        }],
-
-    // TODO...
-    "icons.prioritySet1": ["１", "２", "３", "４"],
-    "icons.prioritySet2": ["①", "②", "③", "④"],
-    // todoist_sync_handlers.py:event_name and gcal_sync_handlders.py:cal_id depend on this
-    // thus, icons used by todoist_sync_handlers.py:event_name func must be up-to-date with icons below
-    "icons.eventSet": ["１", "２", "３", "４", "⚠", "🔄", "⚛️", "📖", "🚗", "📺", "🐞", "📟", "⚙️",
-        "🚀", "🚧", "💠", "🕹", "☎️", "🗑️", "👨‍💻", "❓", "💈", "🛒", "🎫",
-         "🔎", "💵", "🍳", "🌐", "🔔", "📧", "📬", "🗓", "🏦", "🏠", "🍿"]
+        }]
 }
