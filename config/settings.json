@@ -1,6 +1,5 @@
 {
    // Required
-   "todoist_api_token": "",
    /* https://developer.todoist.com/sync/v7/#limits
       60s/1.5s = 40 requests/min to prevent Todoist timeouts */
    "daemon.refreshRateSec": 1.3,
@@ -17,7 +16,6 @@
    // User Preferences
    "projects.excluded": [],
    "projects.standalone": [],
-   "completed.daysToRetrieve": 30, // change this to tasks.completedDaysToRetrieve....
 
    // TODO.......
    "procrastination.detection": true,
@@ -29,7 +27,7 @@
 
    // TODO.......
    "tasks.priorityAutoAdjust": true,
-   "tasks.priorityAutoAdjustExclude": ["project_name"],
+   "tasks.priorityAutoAdjustExclude": [],
 
    // TODO
    "events.notification": true,

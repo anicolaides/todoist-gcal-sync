@@ -57,7 +57,7 @@ class TodoistSync:
                 event_name += icons_cfg['icons.basic']['recurring'] + ' '
 
         url_found = False
-
+        label_icon = False
         # appends icons based on task labels
         task_labels = todoist_item['labels']
         if task_labels:
@@ -66,6 +66,7 @@ class TodoistSync:
                     for label_name in icons_cfg['icons.labels'][icon_group]:
                         if label_id == self.__todoist.find_label_id(label_name):
                             event_name += icons_cfg['icons.labels'][icon_group][label_name] + ' '
+                            label_icon = True
 
         if project and parent_project:
             parsed_icon = False
@@ -89,7 +90,7 @@ class TodoistSync:
                                 parsed_icon = True
 
             # if the parser above has not added any icon
-            if not parsed_icon:
+            if not parsed_icon and not label_icon:
                 # by project name
                 for label in icons_cfg['icons.projects']:
                     if label == project['name'].lower():
