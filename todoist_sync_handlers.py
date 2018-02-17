@@ -254,7 +254,7 @@ class TodoistSync:
                 colorId = None
                 difference = None
                 new_event_date = None
-                extended_date1 = None
+                extended_utc = None
 
                 item = self.__todoist.api.items.get_by_id(item_id)
 
@@ -264,26 +264,28 @@ class TodoistSync:
                     difference = (new_event_date - datetime.now(todoist_tz).date()).days
                     new_event_date = self.__todoist.__date_to_google_format__(new_event_date)
 
-                # convert extended date to Gcal format
+                # convert extended_utc date to Gcal format
                 if extended_date:
                     overdue_due_date = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
                     difference = (overdue_due_date - datetime.now(todoist_tz).date()).days
 
-                    extended_date1 = self.__todoist.__todoist_utc_to_date__(str(extended_date))
-                    extended_date1 = self.__todoist.__date_to_google_format__(extended_date1)
+                    extended_utc = self.__todoist.__todoist_utc_to_date__(str(extended_date))
+                    extended_utc += timedelta(days=1)
+                    extended_utc = self.__todoist.__date_to_google_format__(extended_utc)
+
 
                 event_name = self.event_name(item)
 
                 if difference < 0:
                     overdue = True
-                    event_name = "⚠ " + event_name
+                    event_name = load_cfg.ICONS['icons.basic']['overdue'] + ' ' + event_name
                     colorId = 11
                 elif difference >= 0 and self.__todoist.is_overdue(item_id):
                     # keep color to overdue
                     colorId = 11
 
                 if self.__gcal.update_event_date(calendar_id, event_id, new_event_date, event_name,\
-                    colorId, extended_date1) and new_due_date:
+                    colorId, extended_utc) and new_due_date:
 
                     # update 'todoist' table with new due_date_utc
                     try:
@@ -512,7 +514,7 @@ class TodoistSync:
                         task_due_date_utc = datetime.strptime(item['due_date_utc'], "%a %d %b %Y %H:%M:%S +0000").date()
                         difference = abs((task_due_date_utc - completed_utc).days)
 
-                        # events to be extended
+                        # events to be extended_utc
                         if completed_utc > task_due_date_utc and difference > 0 and difference < 3:
                             due_date_utc = self.__todoist.__todoist_utc_to_date__(item['due_date_utc'])
                             completed_date_utc = self.__todoist.__todoist_utc_to_date__(completed_due_utc)
