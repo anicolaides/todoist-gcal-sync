@@ -270,7 +270,7 @@ class TodoistSync:
                     difference = (overdue_due_date - datetime.now(todoist_tz).date()).days
 
                     extended_utc = self.__todoist.__todoist_utc_to_date__(str(extended_date))
-                    extended_utc += timedelta(days=1)
+                    #extended_utc += timedelta(days=1)
                     extended_utc = self.__todoist.__date_to_google_format__(extended_utc)
 
 
@@ -332,19 +332,16 @@ class TodoistSync:
 
                 if not completed_task:
                     if not old_due_date_utc:
-                        task_due_date_utc = self.__todoist.__todoist_utc_to_date__(
-                            todoist_item['due_date_utc'])
+                        task_due_date_utc = self.__todoist.str_to_date_obj(todoist_item['due_date_utc'])
                     else:
-                        task_due_date_utc = self.__todoist.__todoist_utc_to_date__(
-                            old_due_date_utc)
+                        task_due_date_utc = self.__todoist.str_to_date_obj(old_due_date_utc)
 
                     todoist_tz = pytz.timezone(self.timezone())
                     todays_date_utc = datetime.now(todoist_tz).astimezone(pytz.utc).date()
                     difference = (task_due_date_utc - todays_date_utc).days
 
-                    if difference >= 0:
-                        datetime_todoist_frmt = datetime.now(pytz.UTC).replace(hour=21, minute=59, second=59) \
-                            .strftime("%a %d %b %Y %H:%M:%S +0000")
+                    if difference > 0:
+                        datetime_todoist_frmt = datetime.now(pytz.UTC).strftime("%a %d %b %Y %H:%M:%S +0000")
 
                         # move event to today's day using the self.__gcal.date_google which will
                         # also update the 'todoist' table with the new due date
@@ -353,7 +350,6 @@ class TodoistSync:
                                 todoist_item['content'], event_id)
                         except Exception as err:
                             log.error(str(err) + '\nCould not update date of event in Gcal...')
-
                     # if task was due yesterday and got completed today extend event length
                     # to the next day
                     elif difference < 0:

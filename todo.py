@@ -746,7 +746,7 @@ class Todoist:
         conn.close()
         return calendar_id
 
-    ########### Assistance functions ###########
+    ########### Assistive functions ###########
     def is_overdue(self, task_id):
         conn = sqlite3.connect('db/data.db')
 
@@ -807,6 +807,10 @@ class Todoist:
                 log.exception(err)
 
         return converted_date_str
+
+    def str_to_date_obj(self, date_str, frmt='%a %d %b %Y %H:%M:%S +0000'):
+        """ Utility function to return str date to date object. """
+        return datetime.strptime(date_str, frmt).date()
 
     def parse_google_date(self, google_date):
         """ Takes in a Todoist task's due date (UTC), and converts it to a normal date. """
