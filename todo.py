@@ -441,10 +441,15 @@ class Todoist:
                                             + str(task_id) + ' as completed from task checked.')
 
                                 # Task location --> Gcal (sync)
-                                if task_id and self.sync.task_location(calendar_id, event_id, task_id, changes[i]['project_id']):
+                                if task_id and changes[i]['project_id'] == Todoist.api.state['user']['inbox_project']:
+                                    # task moved back to Inbox --> remove from Gcal
+                                    try:
+                                        if self.sync.deletion(calendar_id, event_id, task_id ):
+                                            log.info('Task with id: ' + str(task_id) + ' has been deleted successfully.')
+                                    except Exception as err:
+                                        pass
+                                elif task_id and self.sync.task_location(calendar_id, event_id, task_id, changes[i]['project_id']):
                                     log.info(str(task_id) + ' has been moved to a different project.')
-                                else:
-                                    write_to_db = False
 
                     else:
                         # remove event from Gcal
