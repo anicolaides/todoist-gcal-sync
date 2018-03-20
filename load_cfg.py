@@ -28,3 +28,4 @@ CFG_DIR = 'config/'
 USER_PREFS = load_settings('settings.json')
 TODOIST_SCHEMA = load_settings('todoist_schema.json')
 ICONS = load_settings('icons.json')
+DB_SCHEMA = load_settings('db_schema.json')

@@ -18,6 +18,7 @@ import time
 import load_cfg
 from gcal_sync_handlers import GcalSync
 import requests
+import sql_ops
 
 log = logging.getLogger(__name__)
 
@@ -36,103 +37,91 @@ class Gcal:
 
     def insert_event(self, calId, event_name, start_datetime=None, end_datetime=None, location=None, desc=None, \
         tz='America/Los_Angeles', color_id=None):
+        event_id = None
         if end_datetime is None:
             end_datetime = start_datetime
 
-        """ Inserts event to Google Calendar. """
-        event = {
-            'summary': event_name,
-            'location': location,
-            'description': desc,
-            'start': {
-                'date': start_datetime,
-                'timeZone': tz,
-            },
-            'end': {
-                'date': end_datetime,
-                'timeZone': tz,
-            },
-            "colorId": color_id,
-            'reminders': {
-                'useDefault': False,
-                'overrides': load_cfg.USER_PREFS['events.reminder'],
-            },
-        }
+        if calId is not None:
+            """ Inserts event to Google Calendar. """
+            event = {
+                'summary': event_name,
+                'location': location,
+                'description': desc,
+                'start': {
+                    'date': start_datetime,
+                    'timeZone': tz,
+                },
+                'end': {
+                    'date': end_datetime,
+                    'timeZone': tz,
+                },
+                "colorId": color_id,
+                'reminders': {
+                    'useDefault': False,
+                    'overrides': load_cfg.USER_PREFS['events.reminder'],
+                },
+            }
 
-        if calId:
             event = Gcal.service.events().insert(calendarId=calId, body=event).execute()
-        return event['id']
+            event_id = event['id']
+
+        return event_id
 
     def create_calendar(self, project_name, project_id, todoist_tz):
         cal_exists = False
         cal_project_name = 'Project: ' + project_name
         cal_id = None
 
-        conn = sqlite3.connect('db/data.db')
+        ''' Turns flag to True if calendar exists on Google's servers;
+        Source :https://developers.google.com/google-apps/calendar/v3/reference/calendarList/list '''
+        page_token = None
+        while True:
+            calendar_list = Gcal.service.calendarList().list(pageToken=page_token).execute()
+            for calendar_list_entry in calendar_list['items']:
+                if calendar_list_entry['summary'] == cal_project_name:
+                    cal_exists = True
+                    cal_id = calendar_list_entry['id']
+            page_token = calendar_list.get('nextPageToken')
+            if not page_token:
+                break
 
-        with conn:
-            c = conn.cursor()
+        ''' Creates Google Calendar with Todoist project name (if calendar does not exist). '''
+        if not cal_exists:
+            calendar = {
+                'summary': cal_project_name,
+                'timeZone': todoist_tz
+            }
 
-            c.execute('''CREATE TABLE IF NOT EXISTS gcal_ids
-                (calendar_name integer, calendar_id integer, todoist_project_id integer, calendar_sync_token text)''')
+            try:
+                created_calendar = Gcal.service.calendars().insert(body=calendar).execute()
 
-            ''' Turns flag to True if calendar exists on Google's servers;
-            Source :https://developers.google.com/google-apps/calendar/v3/reference/calendarList/list '''
-            page_token = None
-            while True:
-                calendar_list = Gcal.service.calendarList().list(pageToken=page_token).execute()
-                for calendar_list_entry in calendar_list['items']:
-                    if calendar_list_entry['summary'] == cal_project_name:
-                        cal_exists = True
-                        cal_id = calendar_list_entry['id']
-                page_token = calendar_list.get('nextPageToken')
-                if not page_token:
-                    break
+                cal_row = [cal_project_name, created_calendar['id'], project_id, None,]
 
-            ''' Creates Google Calendar with Todoist project name (if calendar does not exist). '''
-            if not cal_exists:
-                calendar = {
-                    'summary': cal_project_name,
-                    'timeZone': todoist_tz
-                }
-
-                try:
-                    created_calendar = Gcal.service.calendars().insert(body=calendar).execute()
-
-                    cal_for_project_info = [cal_project_name,
-                                            created_calendar['id'], project_id, None,]
-                    c.executemany('INSERT INTO gcal_ids VALUES (?,?,?,?)',
-                                (cal_for_project_info,))
-
-                    conn.commit()
-
+                if sql_ops.insert_many("gcal_ids", cal_row):
                     log.info("'" + cal_project_name + "'" + ' has been created.')
-                except errors.HttpError as err:
-                    log.exception(err._get_reason)
-                    time.sleep(1)
-                    sys.exit("The daemon is about to abort operation.")
-            else:
-                if os.path.exists('/data.db'):
-                    ''' Case where calendar id is missing from database '''
-                    already_in_db = False
+            except errors.HttpError as err:
+                log.exception(err._get_reason)
+                time.sleep(1)
+                sys.exit("The daemon is about to abort operation.")
+        else:
+            if os.path.exists('/data.db'):
+                ''' Case where calendar id is missing from database '''
+                already_in_db = False
 
-                    # Check if calendar found on Google's server is missing from 'gcal_ids' table
-                    cursor = conn.execute("SELECT calendar_id from gcal_ids")
-                    for row in cursor:
-                        if row[0] == cal_id:
-                            already_in_db = True
+                # Check if calendar found on Google's server is missing from 'gcal_ids' table
+                # cursor = conn.execute("SELECT calendar_id from gcal_ids")
+                cursor = sql_ops.select_from_where("calendar_id", "gcal_ids")
+                for row in cursor:
+                    if row[0] == cal_id:
+                        already_in_db = True
+                        break
 
-                    if not already_in_db:
-                        cal_for_project_info = [cal_project_name, cal_id, project_id, None,]
-                        c.executemany('INSERT INTO gcal_ids VALUES (?,?,?,?)',
-                                    (cal_for_project_info,))
-
-                        conn.commit()
+                if not already_in_db:
+                    cal_row = [cal_project_name, cal_id, project_id, None,]
+                    if sql_ops.insert_many("gcal_ids", cal_row):
                         log.info(cal_project_name + "\' has been added to the database.")
-                    else:
-                        log.warning(cal_project_name + '\' already exists.')
-
-        conn.close()
+                else:
+                    log.warning(cal_project_name + '\' already exists.')
 
     def sync_cal_deletion(self):
         """ Delete info of calendar that got deleted from Google's server. """
@@ -178,47 +167,33 @@ class Gcal:
         deletion = True
         try:
             if cal_id:
-                calendar = Gcal.service.calendars().delete(calendarId=cal_id).execute()
+                Gcal.service.calendars().delete(calendarId=cal_id).execute()
         except Exception as err:
             log.exception(err)
             deletion = False
         return deletion
 
     def delete_cals(self):
-        op_code = True
+        calendars_deleted = True
+        try:
+            data = sql_ops.select_from_where("calendar_name, calendar_id", "gcal_ids", fetch_all=True)
 
-        conn = sqlite3.connect('db/data.db')
-
-        with conn:
-            c = conn.cursor()
-
-            try:
-                cursor = conn.execute("SELECT calendar_name, calendar_id FROM gcal_ids")
-
-                # delete all calendars created by the daemon, from Google Calendar
-                for row in cursor:
-                    # row[0] is the id of the calendar to be deleted
-                    if row[1]:
-                        if (self.delete_calendar(row[1])):
-                            log.info(row[0] + '\' calendar has been deleted.')
-                            try:
-                                c.execute(
-                                    '''DELETE FROM gcal_ids WHERE calendar_id = ?''', (row[1],))
-                            except Exception as err:
-                                log.error(err)
-                        else:
-                            log.error('\'' + row[0] + '\' could not be deleted.')
+            # delete all calendars created by the daemon, from Google Calendar
+            for row in data:
+                # row[0] is the id of the calendar to be deleted
+                if row[1]:
+                    if (self.delete_calendar(row[1])):
+                        log.info(row[0] + '\' calendar has been deleted.')
+                        sql_ops.delete_from_where("gcal_ids", "calendar_id", row[1])
                     else:
-                        op_code = False
-                        log.error('Calendar id provided for deletion is not correct.')
+                        log.error('\'' + row[0] + '\' could not be deleted.')
+                else:
+                    calendars_deleted = False
+                    log.error('Calendar id provided for deletion is not correct.')
+        except Exception as err:
+            log.exception(err)
 
-                conn.commit()
-            except Exception as err:
-                log.exception(err)
-
-        conn.close()
-
-        return op_code
+        return calendars_deleted
 
     def delete_event(self, cal_id, event_id):
         op_code = False
@@ -247,7 +222,7 @@ class Gcal:
                 event['colorId'] = color_id
 
                 try:
-                    updated_event = Gcal.service.events().update(calendarId=cal_id, \
+                    Gcal.service.events().update(calendarId=cal_id, \
                     eventId=event_id, body=event).execute()
                 except Exception as err:
                     log.exception('Although the color of the event was retrieved,'
@@ -282,7 +257,6 @@ class Gcal:
         op_code = True
 
         event = None
-        updated_event = None
 
         try:
             # retrieve event from Google Calendar API
@@ -302,7 +276,7 @@ class Gcal:
 
         if dest_cal_id != cal_id:
             try:
-                updated_event = Gcal.service.events().move(calendarId=cal_id, eventId=event_id,destination=dest_cal_id).execute()
+                Gcal.service.events().move(calendarId=cal_id, eventId=event_id,destination=dest_cal_id).execute()
             except Exception as err:
                 log.exception(err)
 
@@ -312,8 +286,6 @@ class Gcal:
         op_code = True
 
         event = None
-        updated_event = None
-
         try:
             # retrieve event from Google Calendar API
             event = Gcal.service.events().get(calendarId=cal_id, eventId=event_id).execute()
@@ -360,38 +332,49 @@ class Gcal:
                 event['reminders']['overrides'] =  [{ 'method': 'popup', 'minutes': minutes_reminder}]
 
             try:
-                updated_event = Gcal.service.events().update(calendarId=cal_id, eventId=event_id, body=event).execute()
+                Gcal.service.events().update(calendarId=cal_id, eventId=event_id, body=event).execute()
             except Exception as err:
                 log.exception(str(err))
                 op_code = False
 
         return op_code
 
+    def update_cal_name(self, cal_id, new_cal_name):
+        cal_name_updated = True
+        calendar = None
+        new_cal_name = 'Project: ' + new_cal_name
+
+        if cal_id and new_cal_name:
+            try:
+                calendar = Gcal.service.calendars().get(calendarId=cal_id).execute()
+            except Exception as err:
+                log.exception(err)
+                cal_name_updated = False
+
+            if calendar:
+                calendar['summary'] = new_cal_name
+
+                try:
+                    Gcal.service.calendars().update(calendarId=cal_id, body=calendar).execute()
+                except Exception as err:
+                    log.exception(str(err))
+                    cal_name_updated = False
+
+        return cal_name_updated
+
     def sync_gcal(self):
         """ Updates Todoist to reflect Google Calendar changes. """
 
-        conn = sqlite3.connect('db/data.db')
+        cal_ids = sql_ops.select_from_where("calendar_id, calendar_sync_token", "gcal_ids", None, None, fetch_all=True)
 
-        with conn:
-            c = conn.cursor()
+        for i in range(0, len(cal_ids)):
+            try:
+                temp_token = self.sync.cal_id(cal_ids[i][0], cal_ids[i][1])
+            except requests.exceptions.HTTPError as err:
+                log.debug(err)
 
-            c.execute("SELECT calendar_id, calendar_sync_token FROM gcal_ids")
-
-            cal_ids = c.fetchall()
-
-            for i in range(0, len(cal_ids)):
-                try:
-                    temp_token = self.sync.cal_id(cal_ids[i][0], cal_ids[i][1])
-                except requests.exceptions.HTTPError as err:
-                    log.debug(err)
-
-                # update calendar_sync_token in "gcal_ids" table
-                c.execute("UPDATE gcal_ids SET calendar_sync_token = ? WHERE calendar_id = ?",
-                            (temp_token, cal_ids[i][0],))
-
-                conn.commit()
-
-        conn.close()
+            # update calendar_sync_token in "gcal_ids" table
+            sql_ops.update_set_where("gcal_ids", "calendar_sync_token = ?", "calendar_id", temp_token, cal_ids[i][0])
 
     def set_todoist_ref(self, todoist_obj_ref):
         self.todoist = todoist_obj_ref

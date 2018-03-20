@@ -19,6 +19,7 @@ import dateutil.parser
 import todoist_auth
 from todoist_sync_handlers import TodoistSync
 import logging
+import sql_ops
 
 log = logging.getLogger(__name__)
 
@@ -38,13 +39,14 @@ class Todoist:
         self.inbox_project_id = Todoist.api.user.state['user']['inbox_project']
         self.changed_location_of_event = None
 
-        # TODO: add icons to be assiciated with labels variable
-
         # if db exists, skip first time initialization
         if os.path.exists('db/data.db'):
             # to prevent losing sync data when the daemon shuts down
             self.sync_todoist(initial_sync)
         else:
+            # initialize database tables
+            sql_ops.init_db()
+
             if settings['projects.standalone']:
                 self.standalone_projects()
             if settings['projects.excluded']:
@@ -57,7 +59,7 @@ class Todoist:
         """
         self.write_sync_db(Todoist.api.sync())
 
-        self.projects_gcal()
+        self.projects_to_gcal()
 
         if self.premium_user:
             self.init_completed_tasks()
@@ -66,226 +68,136 @@ class Todoist:
             # Todoist task --> Gcal event
             self.sync.new_task_added(item)
 
-        log.debug("Pausing operation for 20s, to prevent reaching Todoist's user limits due to " \
-        + "initialization utilizing massive amount of requests.")
-        time.sleep(20)
+        log.debug("Pausing operation for 10s, due to utilization of massive amount of requests.")
+        time.sleep(10)
 
-    def projects_gcal(self):
-        """ Create a calendar for each Todoist project, taking into consideration
-        'excluded_ids' and 'standalone_ids' table.
+    def projects_to_gcal(self):
         """
-        self.sync.timezone()
+            Creates a calendar for each Todoist project, while taking into consideration
+            'excluded_ids' and 'standalone_ids' table.
+        """
 
-        conn = sqlite3.connect('db/data.db')
+        # create a calendar for each parent project, excluding project 'Inbox'
+        for project in Todoist.api.projects.all():
+            standalone_project = False
 
-        with conn:
-            c = conn.cursor()
+            # search for project in "excluded_ids"
+            if sql_ops.select_from_where("project_id", "excluded_ids", "project_id", \
+                    project['id']):
+                log.info('The project \'' + Todoist.api.projects.get_by_id(
+                project['id'])['name'] + '\' is beeing excluded.')
 
-            # create a calendar for each parent project, excluding project 'Inbox'
-            for project in Todoist.api.projects.all():
-                standalone_project = False
+            # if not excluded
+            else:
+                # search for project in "standalone_ids"
+                if sql_ops.select_from_where("project_id", "standalone_ids", \
+                    "project_id", project['id']):
+                    standalone_project = True
 
-                # search for project in "excluded_ids"
-                try:
-                    c.execute("SELECT project_id FROM excluded_ids WHERE project_id = ?", \
-                        (project['id'],))
-                except sqlite3.OperationalError as err:
-                    log.debug(err)
-
-                if c.fetchone():
-                    log.info('The project \'' + Todoist.api.projects.get_by_id(
-                    project['id'])['name'] + '\' is beeing excluded.')
-
-                # if not excluded
-                else:
-                    # search for project in 'standalone_ids'
-                    try:
-                        c.execute("SELECT project_id from standalone_ids WHERE project_id = ?", \
-                            (project['id'],))
-                    except Exception as err:
-                        log.debug(err)
-
-                    if c.fetchone():
-                        standalone_project = True
-
-                    # for a standalone project, the project cannot be excluded or archived
-                    # create calendar for parent or standalone projects
-                    if not project['is_archived'] and (project['indent'] == 1 \
-                        and project['name'] != 'Inbox') or (project['indent'] != 1 \
-                        and project['name'] != 'Inbox' and standalone_project):
-                        self.gcal.create_calendar(project['name'], project['id'], self.todoist_user_tz)
+                # for a standalone project, the project cannot be excluded or archived
+                # create calendar for parent or standalone projects
+                if not project['is_archived'] and (project['indent'] == 1 \
+                    and project['name'] != 'Inbox') or (project['indent'] != 1 \
+                    and project['name'] != 'Inbox' and standalone_project):
+                    self.gcal.create_calendar(project['name'], project['id'], self.todoist_user_tz)
 
     def exclude_projects(self):
+        """
+            Excludes projects from being synched.
+        """
+
         excluded_projects = []
         for project_name in self.settings['projects.excluded']:
-            for project in Todoist.api.projects.all():
-                if project_name == project['name']:
-                    excluded_projects.append(project)
+            for todoist_project in Todoist.api.projects.all():
+                if project_name == todoist_project['name']:
+                    excluded_projects.append(todoist_project)
 
-        conn = sqlite3.connect('db/data.db')
+        # populate lists with the properties of each excluded project
+        excluded_indents = []
+        excluded_ids = []
+        for project in excluded_projects:
+            excluded_indents.append(project['indent'])
+            excluded_ids.append(project['id'])
 
-        with conn:
-            c = conn.cursor()
+        # sort lists to have parent projects first
+        keydict = dict(zip(excluded_ids, excluded_indents))
+        excluded_ids.sort(key=keydict.get)
 
-            c.execute('''CREATE TABLE IF NOT EXISTS excluded_ids
-                (project_name TEXT, project_id integer, parent_project_id integer )''')
-
-            # populate lists with the properties of each excluded project
-            excluded_indents = []
-            excluded_ids = []
-            for project in excluded_projects:
-                excluded_indents.append(project['indent'])
-                excluded_ids.append(project['id'])
-
-            # sort lists to have parent projects first
-            keydict = dict(zip(excluded_ids, excluded_indents))
-            excluded_ids.sort(key=keydict.get)
-
-            # insert row of data to 'excluded_ids'
-            for project_id in excluded_ids:
-                # search for project in the 'standalone_ids'
-                try:
-                    c.execute("SELECT project_id FROM standalone_ids WHERE project_id = ?", \
-                        (project_id,))
-                except sqlite3.OperationalError as err:
-                    log.debug(err)
-
-                if c.fetchone():
-                    log.info('Project \'' + Todoist.api.projects.get_by_id(project_id) \
-                        ['name'] + '\' is a standalone project, thus cannot be excluded.')
-
+        # insert row of data to 'excluded_ids'
+        for project_id in excluded_ids:
+            # search for project in the 'standalone_ids'
+            if sql_ops.select_from_where("project_id", "standalone_ids", "project_id", \
+                    project_id):
+                log.info('Project \'' + Todoist.api.projects.get_by_id(project_id) \
+                    ['name'] + '\' is a standalone project, thus cannot be excluded.')
+            else:
                 # if not a standalone project, process further
+                parent_id = self.__parent_project_id__(project_id)
+
+                # if parent project is already excluded
+                if sql_ops.select_from_where("project_id", "excluded_ids", "project_id", \
+                        project_id):
+                    log.info('The parent project of the project to be excluded is already \
+                        excluded.')
                 else:
-                    parent_id = self.__parent_project_id__(project_id)
+                    # sub-projects of project to be excluded have already been excluded
+                    if sql_ops.select_from_where("parent_project_id", "excluded_ids", "parent_project_id", \
+                        project_id):
 
-                    try:
-                        c.execute("SELECT project_id FROM excluded_ids WHERE project_id = ?", \
-                            (parent_id,))
-                    except sqlite3.OperationalError as err:
-                        log.exception(err)
+                        # remove sub-projects of parent project
+                        if sql_ops.delete_from_where("excluded_ids", "parent_project_id", project_id):
+                            """
+                                1. Delete calendar from gcal service.
+                                2. Remove all the tasks with the project_id of calendar from db.
+                                3. Insert project to 'excluded_ids'.
+                            """
+                            calendar_id = sql_ops.select_from_where("calendar_id", "gcal_ids", \
+                                "todoist_project_id", project_id)
 
-                    # if parent project is already excluded
-                    if c.fetchone():
-                        log.info('The parent project of the project to be excluded is already \
-                            excluded.')
+                            if self.gcal.delete_calendar(calendar_id) \
+                                and sql_ops.delete_from_where("todoist", "parent_project_id", project_id):
+
+                                sql_ops.delete_from_where("gcal_ids", "todoist_project_id", project_id)
+
+                                if sql_ops.insert("excluded_ids", Todoist.api.projects.get_by_id(project_id)['name'], project_id, parent_id):
+                                    log.info('The project with name \'' \
+                                    + Todoist.api.projects.get_by_id(project_id)['name'] + \
+                                    '\' has been added to the \'excluded_ids\' table.')
                     else:
-                        """ Case where sub-projects of parent project to be excluded have been excluded.
-                        """
-                        try:
-                            c.execute("SELECT parent_project_id FROM excluded_ids WHERE \
-                                parent_project_id = ?", (project_id,))
-                        except sqlite3.OperationalError as err:
-                            log.exception(err)
-
-                        sub_projs_removed = True
-                        if c.fetchone():
-                            try:
-                                # remove sub-projects of parent project
-                                c.execute('''DELETE FROM excluded_ids WHERE parent_project_id = ?''', \
-                                    (project_id,))
-                                conn.commit()
-                            except sqlite3.OperationalError as err:
-                                log.warning(err)
-                                sub_projs_removed = False
-
-                            if sub_projs_removed:
-                                """ 1.delete calendar from gcal service
-                                    2.remove all the tasks with the project_id of calendar from db
-                                    3.insert project to 'excluded_ids'
-                                """
-                                try:
-                                    c.execute("SELECT calendar_id FROM gcal_ids WHERE \
-                                        todoist_project_id = ?", (project_id,))
-                                    calendar_id = c.fetchone()[0]
-
-                                    if self.gcal.delete_calendar(calendar_id):
-                                        tasks_deleted = True
-                                        try:
-                                            c.execute('''DELETE FROM todoist WHERE \
-                                                parent_project_id = ?''', (project_id,))
-                                        except sqlite3.OperationalError as err:
-                                            tasks_deleted = False
-                                            log.exception(err)
-
-                                        if tasks_deleted:
-                                            try:
-                                                c.execute('''DELETE FROM gcal_ids WHERE \
-                                                    todoist_project_id = ?''', (project_id,))
-                                            except sqlite3.OperationalError as err:
-                                                log.warning(err)
-
-                                            c.execute("INSERT INTO excluded_ids VALUES (?,?,?)", \
-                                                (Todoist.api.projects.get_by_id(project_id)['name'],
-                                                project_id, parent_id,))
-
-                                            log.info('The project with name \'' \
-                                            + Todoist.api.projects.get_by_id(project_id)['name'] + \
-                                            '\' has been added to the \'excluded_ids\' table.')
-
-                                        conn.commit()
-                                except sqlite3.OperationalError as err:
-                                    log.warning(err)
-                        else:
-                            c.execute("INSERT INTO excluded_ids VALUES (?,?,?)", \
-                                (Todoist.api.projects.get_by_id(project_id)['name'], project_id, \
-                                parent_id,))
+                        if sql_ops.insert("excluded_ids", Todoist.api.projects.get_by_id(project_id)['name'], project_id, parent_id):
                             log.info('The project with name \'' + Todoist.api.projects.get_by_id(
                                 project_id)['name'] + '\' has been added to the \'excluded_ids\' table.')
 
-                            conn.commit()
-
-        conn.close()
-
     def standalone_projects(self):
+        """
+            Makes projects standalone.
+        """
         standalone_projects = []
         for project_name in self.settings['projects.standalone']:
             for project in Todoist.api.projects.all():
                 if project_name == project['name']:
                     standalone_projects.append(project)
 
-        conn = sqlite3.connect('db/data.db')
+        for project in standalone_projects:
+            if sql_ops.select_from_where("project_id", "excluded_ids", "project_id", project['id']):
+                log.info('The project \'' + project['name'] + '\' is being excluded, \
+                    thus cannot become a standalone project.')
+            else:
+                # if not excluded
+                parent_project_id = self.__parent_project_id__(project['id'])
+                parent_proj_excluded = True
 
-        with conn:
-            c = conn.cursor()
-
-            c.execute('''CREATE TABLE IF NOT EXISTS standalone_ids
-                (project_name TEXT, project_id integer )''')
-
-            for project in standalone_projects:
-                try:
-                    c.execute("SELECT project_id FROM excluded_ids WHERE project_id = ?", \
-                        (project['id'],))
-                except sqlite3.OperationalError:
-                    # ignore error because of 'no such table: excluded_ids'
-                    pass
-
-                if c.fetchone():
-                    log.info('The project with name \'' + project['name'] + '\' is being excluded, \
-                        thus cannot become a standalone project.')
+                if not self.settings['projects.excluded']:
+                    parent_proj_excluded = False
                 else:
-                    # if not excluded
-                    parent_project_id = self.__parent_project_id__(project['id'])
-                    parent_proj_excluded = True
-
-                    if not self.settings['projects.excluded']:
+                    if not sql_ops.select_from_where("project_id", "excluded_ids", "project_id", parent_project_id):
                         parent_proj_excluded = False
-                    else:
-                        try:
-                            c.execute("SELECT project_id FROM excluded_ids WHERE project_id = ?", \
-                                (parent_project_id,))
-                        except sqlite3.OperationalError:
-                            # ignore error because of 'no such table: excluded_ids'
-                            parent_proj_excluded = False
 
-                    if not parent_proj_excluded and project['indent'] != 1:
-                        c.execute("INSERT INTO standalone_ids VALUES (?,?)", (project['name'], \
-                            project['id'],))
-
-                        conn.commit()
-                    else:
-                        log.info('The parent project of ' + project['name'] + ' is already marked \
-                            as a standalone project.')
-        conn.close()
+                if not parent_proj_excluded and project['indent'] != 1:
+                    sql_ops.insert("standalone_ids", project['name'], project['id'])
+                else:
+                    log.info('The parent project of ' + project['name'] + ' is already marked \
+                        as a standalone project.')
 
     def sync_todoist(self, initial_sync=None):
         # indicates the event was just moved
@@ -325,6 +237,7 @@ class Todoist:
 
         changes = []
         note_changes = []
+        project_changes = []
         if new_api_sync:
             new_api_sync_token = new_api_sync['sync_token']
 
@@ -332,382 +245,362 @@ class Todoist:
             if prev_sync_token != new_api_sync_token:
                 changes = new_api_sync['items']
                 note_changes = new_api_sync['notes']
+                project_changes = new_api_sync['projects']
 
-        conn = sqlite3.connect('db/data.db')
+        # for project changed, perform the following operations
+        """
+        for k in range(0, len(project_changes)):
+            project = project_changes[k]
+            calendar_id = None
+            calendar_name = None
+            # check if project is in "gcal_ids" table
+            project_found = False
 
-        with conn:
-            c = conn.cursor()
+            calendar_data = sql_ops.select_from_where("calendar_id, calendar_name", "gcal_ids", "todoist_project_id", project['id'])
 
-            # if anything changed since last sync, then
-            # for each changed item, perform the following operations
-            for i in range(0, len(changes)):
-                task_id = changes[i]['id']
+            if calendar_data is not None:
+                calendar_id = calendar_data[0]
+                calendar_name = calendar_data[1]
+                project_found = True
 
-                c.execute("SELECT project_id, parent_project_id, due_date, event_id FROM todoist \
-                    WHERE task_id = ?", (task_id,))
+            # new parent project added
+            if not project_found and project['parent_id'] is None and not project['is_archived'] and not project['is_deleted']:
+                # make sure project['id'] is not being excluded
+                if not self.is_excluded(project['id']):
+                    self.gcal.create_calendar(project['name'], project['id'], self.todoist_user_tz)
+            elif project_found and project['is_deleted'] or project['is_archived']:
+                if self.gcal.delete_calendar(calendar_id):
+                    log.info(str(project['name']) + " has been deleted successfully.")
+                    sql_ops.delete_from_where("gcal_ids", "calendar_id", calendar_id)
 
-                task_data = c.fetchone()
-
-                if task_data:
-                    event_id = task_data[3]
-
-                    calendar_id = self.find_task_calId(task_data[0], task_data[1])
-
-                    if changes[i]['due_date_utc']:
-                        if calendar_id and task_data:
-
-                            recurring_task_completed = False
-                            if 'every' in changes[i]['date_string'].lower() and self.premium_user:
-
-                                try:
-                                    # give some time for Todoist's servers to update activity log
-                                    time.sleep(2)
-
-                                    last_activity = Todoist.api.activity.get()
-
-                                    # determine if recurring task was completed or got postponed
-                                    if last_activity:
-                                        for k in range(0, len(last_activity)):
-                                            if last_activity[k]['object_id'] == task_id:
-                                                if last_activity[k]['event_type'] == 'completed':
-                                                    recurring_task_completed = True
-                                                # break on first instance where last_activity[k]['object_id'] == task_id
-                                                break
-                                except Exception as err:
-                                    log.exception(err)
-
-                            if changes[i]['is_deleted']:
-                                try:
-                                    if self.sync.deletion(calendar_id, event_id, task_id):
-                                        log.info('Task with id: ' +  task_id + ' has been successfully deleted.')
-                                except Exception as err:
-                                    write_to_db = False
-                                    log.exception(err)
-                            elif recurring_task_completed and self.premium_user:
-                                c.execute("SELECT project_id, parent_project_id, due_date, event_id  FROM todoist WHERE task_id = ?",
-                                    (task_id,))
-
-                                data_recurring = c.fetchone()
-                                recurring_task_due_date = None
-                                if data_recurring:
-                                    recurring_task_due_date = data_recurring[2]
-
-                                if recurring_task_due_date != changes[i]['due_date_utc']:
-                                    if recurring_task_completed:
-                                        try:
-                                            if self.sync.checked(calendar_id, event_id, task_id, recurring_task_due_date):
-                                                log.debug(str(task_id) + ': recurring task was checked.')
-                                        except Exception as err:
-                                            write_to_db = False
-                                            log.exception(str(err) + 'Could not mark the task with id: ' \
-                                                + str(task_id) + ' as completed rec.')
-
-                                        if self.sync.new_task_added(changes[i]):
-                                            log.debug('Task id ' + str(task_id) \
-                                                + ' has been added to Gcal for the next date of the recurring task.')
-                                        else:
-                                            write_to_db = False
-                                            log.error('Task id: ' +  str(task_id)
-                                            + ' could not be added to Google Calendar, '
-                                            + 'for the next date of the recurring task being completed.')
-                            else:
-                                # Task due date --> Gcal date (sync)
-                                if changes[i]['due_date_utc'] and changes[i]['project_id'] \
-                                    and task_data and changes[i]['due_date_utc'] != task_data[2]:
-
-                                    try:
-                                        self.sync.date_google(calendar_id, changes[i]['due_date_utc'], \
-                                            task_id, changes[i]['content'], event_id)
-                                    except Exception as err:
-                                        write_to_db = False
-                                        log.error(str(err) + 'Could not update date of event in Gcal...')
-
-                                # Task name --> Event name (sync)
-                                try:
-                                    self.sync.task_name(calendar_id, event_id, task_id)
-                                except Exception as err:
-                                    write_to_db = False
-                                    log.error(err)
-
-                                # Task checked --> Gcal (sync)
-                                # needs to be called after task name sync,
-                                # for task with due date in the future to have a tick and be moved to today
-                                if changes[i]['checked']:
-                                    try:
-                                        self.sync.checked(calendar_id, event_id, task_id)
-                                    except Exception as err:
-                                        write_to_db = False
-                                        log.error(str(err) + ' Could not mark the task with id: ' \
-                                            + str(task_id) + ' as completed from task checked.')
-
-                                # Task location --> Gcal (sync)
-                                if task_id and changes[i]['project_id'] == Todoist.api.state['user']['inbox_project']:
-                                    # task moved back to Inbox --> remove from Gcal
-                                    try:
-                                        if self.sync.deletion(calendar_id, event_id, task_id ):
-                                            log.info('Task with id: ' + str(task_id) + ' has been deleted successfully.')
-                                    except Exception as err:
-                                        pass
-                                elif task_id and self.sync.task_location(calendar_id, event_id, task_id, changes[i]['project_id']):
-                                    log.info(str(task_id) + ' has been moved to a different project.')
-
+                    if project['parent_id'] is None:
+                        # parent project
+                        if sql_ops.delete_from_where("todoist", "parent_project_id", project['id']):
+                            log.info("Parent project's task clean up has been performed.")
                     else:
-                        # remove event from Gcal
-                        try:
-                            if self.sync.deletion(calendar_id, event_id, task_id ):
-                                log.info('Task with id: ' + str(task_id) + ' has been deleted successfully.')
-                        except Exception as err:
-                            write_to_db = False
-                            log.error(str(err))
-                elif not changes[i]['checked']:
-                    """ Undo operation detected. """
-                    if self.is_completed(task_id):
-                        self.sync.undo(task_id)
+                        # sub project
+                        if sql_ops.delete_from_where("todoist", "project_id", project['id']):
+                            log.info("Project's task clean up has been performed.")
+            elif project_found and not project['is_archived'] and not project['is_deleted']:
+                # Todoist --> Gcal (Project name sync)
+                # Retrieve calendar name from db
+                prev_project_name = (calendar_name.split('Project:')[1]).strip()
+                if prev_project_name != project['name']:
+                    # update calendar name
+                    new_cal_name = 'Project: ' + project['name']
+                    if self.gcal.update_cal_name(calendar_id, new_cal_name):
+                        # update name in "gcal_ids" table
+                        if sql_ops.update_set_where("gcal_ids", "calendar_name", "calendar_id", new_cal_name, calendar_id):
+                            log.info("Calendar name has been synched with Gcal.")
+                # parent project becomes sub project
+                if project['id'] is not None:
+                    # remove calendar from gcal
+                    if self.gcal.delete_calendar(calendar_id):
+                        log.info(str(project['name']) + " parent project has been deleted to become a sub project.")
+                        # remove calendar from "gcal_ids" table
+                        sql_ops.delete_from_where("gcal_ids", "calendar_id", calendar_id)
 
-                    # task with due date has not been deleted
-                    elif changes[i]['due_date_utc']:
-                        try:
-                            self.sync.new_task_added(changes[i])
-                        except Exception as err:
-                            write_to_db = False
-                            log.exception('task id: ' + str(task_id) \
-                                + ' could not be added to Google Calendar.')
+                        # remove tasks from "todoist" table
+                        sql_ops.delete_from_where("todoist", "project_id", project['id'])
 
-            # for each note changed, perform the following operations
-            for j in range(0, len(note_changes)):
+                        # init tasks of particular project
+                        for item in Todoist.api.items.all(self.has_due_date_utc):
+                            if item['project_id'] == project['id']:
+                                # Todoist task --> Gcal event
+                                self.sync.new_task_added(item)
 
-                # Task note added --> gcal desc (sync)
-                if note_changes[j]['item_id']:
-                    self.sync.update_desc_location(note_changes[j]['item_id'])
-            if write_to_db:
-                self.write_sync_db(new_api_sync)
+        """
+        # if anything changed since last sync, then
+        # for each changed item, perform the following operations
+        for i in range(0, len(changes)):
+            task_id = changes[i]['id']
 
-        conn.close()
+            task_data = sql_ops.select_from_where("project_id, parent_project_id, due_date, event_id", "todoist", "task_id", task_id)
+
+            if task_data:
+                event_id = task_data[3]
+
+                calendar_id = self.find_task_calId(task_data[0], task_data[1])
+
+                if changes[i]['due_date_utc']:
+                    if calendar_id and task_data:
+
+                        recurring_task_completed = False
+                        if 'every' in changes[i]['date_string'].lower() and self.premium_user:
+                            try:
+                                # give some time for Todoist's servers to update activity log
+                                time.sleep(2)
+
+                                last_activity = Todoist.api.activity.get()
+
+                                # determine if recurring task was completed or got postponed
+                                if last_activity:
+                                    for k in range(0, len(last_activity)):
+                                        if last_activity[k]['object_id'] == task_id:
+                                            if last_activity[k]['event_type'] == 'completed':
+                                                recurring_task_completed = True
+                                            # break on first instance where last_activity[k]['object_id'] == task_id
+                                            break
+                            except Exception as err:
+                                log.exception(err)
+
+                        if changes[i]['is_deleted']:
+                            try:
+                                if self.sync.deletion(calendar_id, event_id, task_id):
+                                    log.info('Task with id: ' +  task_id + ' has been successfully deleted.')
+                            except Exception as err:
+                                write_to_db = False
+                                log.exception(err)
+                        elif recurring_task_completed and self.premium_user:
+                            data_recurring = sql_ops.select_from_where("project_id, parent_project_id, due_date, event_id", "todoist", "task_id", task_id)
+                            recurring_task_due_date = None
+                            if data_recurring:
+                                recurring_task_due_date = data_recurring[2]
+
+                            if recurring_task_due_date != changes[i]['due_date_utc']:
+                                if recurring_task_completed:
+                                    try:
+                                        if self.sync.checked(calendar_id, event_id, task_id, recurring_task_due_date):
+                                            log.debug(str(task_id) + ': recurring task was checked.')
+                                    except Exception as err:
+                                        write_to_db = False
+                                        log.exception(str(err) + 'Could not mark the task with id: ' \
+                                            + str(task_id) + ' as completed rec.')
+
+                                    if self.sync.new_task_added(changes[i]):
+                                        log.debug('Task id ' + str(task_id) \
+                                            + ' has been added to Gcal for the next date of the recurring task.')
+                                    else:
+                                        write_to_db = False
+                                        log.error('Task id: ' +  str(task_id)
+                                        + ' could not be added to Google Calendar, '
+                                        + 'for the next date of the recurring task being completed.')
+                        else:
+                            # Task due date --> Gcal date (sync)
+                            if changes[i]['due_date_utc'] and changes[i]['project_id'] \
+                                and task_data and changes[i]['due_date_utc'] != task_data[2]:
+
+                                try:
+                                    self.sync.date_google(calendar_id, changes[i]['due_date_utc'], \
+                                        task_id, changes[i]['content'], event_id)
+                                except Exception as err:
+                                    write_to_db = False
+                                    log.error(str(err) + 'Could not update date of event in Gcal...')
+
+                            # Task name --> Event name (sync)
+                            try:
+                                self.sync.task_name(calendar_id, event_id, task_id)
+                            except Exception as err:
+                                write_to_db = False
+                                log.error(err)
+
+                            # Task checked --> Gcal (sync)
+                            # needs to be called after task name sync,
+                            # for task with due date in the future to have a tick and be moved to today
+                            if changes[i]['checked']:
+                                try:
+                                    self.sync.checked(calendar_id, event_id, task_id)
+                                except Exception as err:
+                                    write_to_db = False
+                                    log.error(str(err) + ' Could not mark the task with id: ' \
+                                        + str(task_id) + ' as completed from task checked.')
+
+                            # Task location --> Gcal (sync)
+                            if task_id and changes[i]['project_id'] == Todoist.api.state['user']['inbox_project']:
+                                # task moved back to Inbox --> remove from Gcal
+                                try:
+                                    if self.sync.deletion(calendar_id, event_id, task_id ):
+                                        log.info('Task with id: ' + str(task_id) + ' has been deleted successfully.')
+                                except Exception as err:
+                                    pass
+                            elif task_id and self.sync.task_location(calendar_id, event_id, task_id, changes[i]['project_id']):
+                                log.info(str(task_id) + ' has been moved to a different project.')
+
+                else:
+                    # remove event from Gcal
+                    try:
+                        if self.sync.deletion(calendar_id, event_id, task_id ):
+                            log.info('Task with id: ' + str(task_id) + ' has been deleted successfully.')
+                    except Exception as err:
+                        write_to_db = False
+                        log.error(str(err))
+            elif not changes[i]['checked']:
+                """ Undo operation detected. """
+                if self.is_completed(task_id):
+                    self.sync.undo(task_id)
+
+                # task with due date has not been deleted
+                elif changes[i]['due_date_utc']:
+                    try:
+                        self.sync.new_task_added(changes[i])
+                    except Exception as err:
+                        write_to_db = False
+                        log.exception('task id: ' + str(task_id) \
+                            + ' could not be added to Google Calendar.')
+
+        # for each note changed, perform the following operations
+        for j in range(0, len(note_changes)):
+
+            # Task note added --> gcal desc (sync)
+            if note_changes[j]['item_id']:
+                self.sync.update_desc_location(note_changes[j]['item_id'])
+
+        if write_to_db:
+            self.write_sync_db(new_api_sync)
 
     def write_sync_db(self, json_str=None):
         if json_str:
-            conn = sqlite3.connect('db/data.db')
+            # truncate table each time, before inserting data
+            sql_ops.truncate_table("todoist_sync")
 
-            with conn:
-                c = conn.cursor()
+            # combine row of data
+            todoist_json_info = [json.dumps(json_str), json_str['sync_token'], ]
 
-                c.execute('''CREATE TABLE IF NOT EXISTS todoist_sync (api_dot_sync text, \
-                    sync_token integer)''')
-
-                # truncate table each time, before inserting data
-                try:
-                    c.execute('''DELETE FROM todoist_sync''')
-
-                    conn.commit()
-                except Exception as err:
-                    log.exception(err)
-
-                # combine row of data
-                todoist_json_info = [json.dumps(json_str), json_str['sync_token'], ]
-
-                c.executemany('INSERT INTO todoist_sync VALUES (?,?)', (todoist_json_info,))
-
-                conn.commit()
-
-            conn.close()
+            sql_ops.insert_many("todoist_sync", todoist_json_info)
         else:
             log.warning('Nothing was provided to be synched.')
 
     def read_json_db(self):
         last_sync_json = None
 
-        conn = sqlite3.connect('db/data.db')
+        # fetches and places each one in a list
+        json_data = sql_ops.select_from_where("api_dot_sync, sync_token", "todoist_sync")
 
-        with conn:
-            c = conn.cursor()
+        if json_data:
+            last_sync = json_data[0]
 
-            c.execute("SELECT api_dot_sync, sync_token FROM todoist_sync")
+            last_sync_json = json.loads(last_sync)
+        else:
+            log.debug('Could not retrieve the data from todoist_sync database.')
 
-            try:
-                # fetches and places each one in a list
-                json_data = c.fetchone()
-
-                if json_data:
-                    last_sync = json_data[0]
-
-                    last_sync_json = json.loads(last_sync)
-            except Exception as err:
-                log.exception(str(err) + 'Could not retrieve the data from todoist_sync database.')
         return last_sync_json
 
     def get_task_id(self, event_id):
-        conn = sqlite3.connect('db/data.db')
+        task_id = sql_ops.select_from_where("task_id", "todoist", "event_id", event_id)
 
-        with conn:
-            c = conn.cursor()
-
-            c.execute("SELECT task_id FROM todoist WHERE event_id = ?",(event_id,))
-
-            task_id = c.fetchone()
-
-            if task_id:
-                task_id = task_id[0]
+        if task_id:
+            task_id = task_id[0]
 
         return task_id
 
     def delete_task(self, task_id):
         op_code = True
 
-        conn = sqlite3.connect('db/data.db')
+        if task_id:
+            item = Todoist.api.items.get_by_id(task_id)
+            if item is not None:
+                item.delete()
+                Todoist.api.commit()
 
-        with conn:
-            c = conn.cursor()
-
-            if task_id:
-                item = Todoist.api.items.get_by_id(task_id)
-                if item is not None:
-                    item.delete()
-                    Todoist.api.commit()
-
-                    # if task is found in the 'todoist' table
-                    try:
-                        c.execute('''DELETE FROM todoist WHERE task_id = ?''', (task_id,))
-
-                        conn.commit()
-                    except Exception as err:
-                        log.exception(err)
-                        op_code = False
-        conn.close()
+                # if task is found in the 'todoist' table
+                if not sql_ops.delete_from_where("todoist", "task_id", task_id):
+                    op_code = False
 
         return op_code
 
     def update_task_due_date(self, cal_id, event_id, task_id, new_event_date):
         todoist_tz = pytz.timezone(self.sync.timezone())
-        conn = sqlite3.connect('db/data.db')
 
-        with conn:
-            c = conn.cursor()
+        due_date = sql_ops.select_from_where("due_date", "todoist", "task_id", task_id)
+        if due_date:
+            # turn google date to todoist utc date
+            due_date = due_date[0]
+            new_due_date = self.parse_google_date(new_event_date)
+            new_due_date = new_due_date.replace(hour=21, minute=59, second=59)
+            new_due_date = new_due_date.isoformat()
 
-            c.execute("SELECT due_date FROM todoist WHERE task_id = ?", (task_id,))
+            try:
+                item = Todoist.api.items.get_by_id(task_id)
+                item.update(due_date_utc=str(new_due_date))
+                Todoist.api.commit()
+            except Exception as err:
+                log.error(err)
 
-            due_date = c.fetchone()
-            if due_date:
-                # turn google date to todoist utc date
-                due_date = due_date[0]
-                new_due_date = self.parse_google_date(new_event_date)
-                new_due_date = new_due_date.replace(hour=21, minute=59, second=59)
-                new_due_date = new_due_date.isoformat()
+            event_name = self.sync.event_name(item)
+            try:
+                self.gcal.update_event_date(cal_id, event_id, None, event_name , None)
+            except Exception as err:
+                log.error(err)
 
-                try:
-                    item = Todoist.api.items.get_by_id(task_id)
-                    item.update(due_date_utc=str(new_due_date))
-                    Todoist.api.commit()
-                except Exception as err:
-                    log.error(err)
+            try:
+                task_due_date = self.__todoist_utc_to_date__(item['due_date_utc'])
+            except Exception as err:
+                log.exception(err)
 
-                event_name = self.sync.event_name(item)
-                try:
-                    self.gcal.update_event_date(cal_id, event_id, None, event_name , None)
-                except Exception as err:
-                    log.error(err)
+            difference = (task_due_date - datetime.now(todoist_tz).date()).days
 
-                try:
-                    task_due_date = self.__todoist_utc_to_date__(item['due_date_utc'])
-                except Exception as err:
-                    log.exception(err)
+            # if task is not overdue and task was overdue previously
+            if difference >= 0 and not self.is_overdue(task_id):
+                self.gcal.update_event_color(cal_id,event_id,None)
+            else:
+                self.gcal.update_event_color(cal_id,event_id,11)
 
-                difference = (task_due_date - datetime.now(todoist_tz).date()).days
-
-                # if task is not overdue and task was overdue previously
-                if difference >= 0 and not self.is_overdue(task_id):
-                    self.gcal.update_event_color(cal_id,event_id,None)
-                else:
-                    self.gcal.update_event_color(cal_id,event_id,11)
-
-                c.execute("UPDATE todoist SET due_date = ? WHERE task_id = ?", \
-                    (item['due_date_utc'],task_id,))
-                conn.commit()
-
-        conn.close()
+            sql_ops.update_set_where("todoist", "due_date = ?", "task_id", item['due_date_utc'], task_id)
 
     def init_completed_tasks(self):
-        conn = sqlite3.connect('db/data.db')
+        completed_task = Todoist.api.completed.get_all(limit=200)['items']
 
-        with conn:
-            c = conn.cursor()
+        for k in range(0, len(completed_task)):
+            task_id = None
+            item = None
+            valid_completed_task = True
+            valid_item = True
 
-            completed_task = Todoist.api.completed.get_all(limit=200)['items']
+            try:
+                validate(completed_task[k], self.todoist_schema['completed_item'])
+            except:
+                valid_completed_task = False
 
-            for k in range(0, len(completed_task)):
-                task_id = None
-                item = None
-                valid_completed_task = True
-                valid_item = True
+            if valid_completed_task:
+                # Todoist task --> Gcal event adds them to the day they were completed
+                task_id = completed_task[k]['task_id']
 
-                try:
-                    validate(completed_task[k], self.todoist_schema['completed_item'])
-                except:
-                    valid_completed_task = False
+                item = Todoist.api.items.get(task_id)
+                if item is not None:
+                    try:
+                        item = item['item']
+                        validate(item, self.todoist_schema['items'])
+                    except:
+                        valid_item = False
 
-                if valid_completed_task:
-                    # Todoist task --> Gcal event adds them to the day they were completed
-                    task_id = completed_task[k]['task_id']
+                    try:
+                        if valid_item and item['due_date_utc'] and completed_task[k]['completed_date'] \
+                            and self.sync.new_task_added(item, completed_task[k]['completed_date']):
 
-                    item = Todoist.api.items.get(task_id)
-                    if item is not None:
-                        try:
-                            item = item['item']
-                            validate(item, self.todoist_schema['items'])
-                        except:
-                            valid_item = False
+                            # grab the data from the db to supply them to the sync.checked func
+                            # attempt to retrieve the data for the task using the "todoist" table
+                            task_data = sql_ops.select_from_where("project_id, parent_project_id, event_id", "todoist", "task_id", task_id)
 
-                        try:
-                            if valid_item and item['due_date_utc'] and completed_task[k]['completed_date'] \
-                             and self.sync.new_task_added(item, completed_task[k]['completed_date']):
+                            if task_data:
+                                event_id = task_data[2]
 
-                                # grab the data from the db to supply them to the sync.checked func
-                                # attempt to retrieve the data for the task using the "todoist" table
-                                c.execute("SELECT project_id, parent_project_id, event_id FROM todoist WHERE task_id = ?", \
-                                    (task_id,))
+                                calendar_id = self.find_task_calId(task_data[0], task_data[1])
 
-                                task_data = c.fetchone()
-
-                                if task_data:
-                                    event_id = task_data[2]
-
-                                    calendar_id = self.find_task_calId(task_data[0], task_data[1])
-
-                                    self.sync.checked(calendar_id,event_id,task_id, True)
-                        except Exception as err:
-                            log.exception(err)
+                                self.sync.checked(calendar_id,event_id,task_id, True)
+                    except Exception as err:
+                        log.exception(err)
 
     ########### Retrieval functions ###########
     def find_cal_id(self, project_id, parent_id):
-        conn = sqlite3.connect('db/data.db')
-
         cal_id = None
-        with conn:
-            c = conn.cursor()
+        task_project_cal_id = None
+        task_parent_cal_id = None
 
-            task_project_cal_id = None
-            task_parent_cal_id = None
+        # check if standalone project of calendar exists, including task being in a parent project
+        task_project_cal_id = sql_ops.select_from_where("calendar_id", "gcal_ids", "todoist_project_id", project_id)
+        if task_project_cal_id:
+            task_project_cal_id = task_project_cal_id[0]
 
-            c.execute("SELECT calendar_id FROM gcal_ids WHERE todoist_project_id = ?", \
-                (project_id,))
+        # if calendar for parent project exists
+        task_parent_cal_id = sql_ops.select_from_where("calendar_id", "gcal_ids", "todoist_project_id", parent_id)
+        if task_parent_cal_id:
+            task_parent_cal_id = task_parent_cal_id[0]
 
-            # check if standalone project of calendar exists, including task being in a parent project
-            task_project_cal_id = c.fetchone()
-            if task_project_cal_id:
-                task_project_cal_id = task_project_cal_id[0]
-
-            c.execute("SELECT calendar_id FROM gcal_ids WHERE todoist_project_id = ?", (parent_id,))
-
-            # if calendar for parent project exists
-            task_parent_cal_id = c.fetchone()
-            if task_parent_cal_id:
-                task_parent_cal_id = task_parent_cal_id[0]
-
-            # if task_project_cal_id means it's in standalone_ids
-            if task_project_cal_id and task_parent_cal_id:
-                cal_id = task_project_cal_id
-            else:
-                cal_id = task_parent_cal_id
-        conn.close()
+        # if task_project_cal_id means it's in standalone_ids
+        if task_project_cal_id and task_parent_cal_id:
+            cal_id = task_project_cal_id
+        else:
+            cal_id = task_parent_cal_id
 
         return cal_id
 
@@ -725,60 +618,28 @@ class Todoist:
             the task belongs to a standalone project, otherwise it belongs to its
             'parent_project_id' (order matters).
         """
-
-        conn = sqlite3.connect('db/data.db')
-
         calendar_id = None
-        with conn:
-            c = conn.cursor()
 
-            c.execute("SELECT calendar_id FROM gcal_ids WHERE todoist_project_id = ?", \
-                (project_id,))
+        standalone_calendar_id = sql_ops.select_from_where("calendar_id", "gcal_ids", "todoist_project_id", project_id)
 
-            standalone_calendar_id = c.fetchone()
+        if standalone_calendar_id:
+            calendar_id = standalone_calendar_id[0]
+        else:
+            calendar_id = sql_ops.select_from_where("calendar_id", "gcal_ids", "todoist_project_id", parent_project_id)
 
-            if standalone_calendar_id:
-                calendar_id = standalone_calendar_id[0]
-            else:
-                c.execute("SELECT calendar_id FROM gcal_ids WHERE todoist_project_id = ?", \
-                (parent_project_id,))
+            if calendar_id:
+                calendar_id = calendar_id[0]
 
-                calendar_id = c.fetchone()
-
-                if calendar_id:
-                    calendar_id = calendar_id[0]
-
-        conn.close()
         return calendar_id
 
     ########### Assistive functions ###########
     def is_overdue(self, task_id):
-        conn = sqlite3.connect('db/data.db')
-
-        row_data = None
-        with conn:
-            c = conn.cursor()
-
-            c.execute('''SELECT overdue integer FROM todoist WHERE task_id = ?''', (task_id,))
-
-            row_data = c.fetchone()
+        row_data = sql_ops.select_from_where("overdue integer", "todoist", "task_id", task_id)
 
         return True if row_data[0] else False
 
     def is_completed(self, task_id):
-        op_code = False
-
-        conn = sqlite3.connect('db/data.db')
-
-        with conn:
-            c = conn.cursor()
-
-            c.execute("SELECT task_id FROM todoist_completed WHERE task_id = ?",( task_id,))
-
-            # if task is found in 'todoist_completed'
-            if c.fetchone():
-                op_code = True
-        return op_code
+        return True if sql_ops.select_from_where("task_id", "todoist_completed", "task_id", task_id) else False
 
     def is_post_response_valid(self, sync_response):
         sync_schema_valid = True
@@ -795,6 +656,10 @@ class Todoist:
                 sync_err_schema_valid = False
 
         return (sync_schema_valid, sync_err_schema_valid)
+
+    def is_excluded(self, project_id):
+        """ Returns true if project is being excluded. """
+        return True if sql_ops.select_from_where("project_name", "excluded_ids", "project_id", project_id) else False
 
     ########### Utility functions ###########
     def has_due_date_utc(self, todoist_item):

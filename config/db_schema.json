@@ -1,0 +1,8 @@
+{
+    "excluded_ids": ["project_name TEXT, project_id integer, parent_project_id integer"],
+    "standalone_ids": ["project_name TEXT, project_id integer"],
+    "todoist_sync": ["api_dot_sync text, sync_token integer"],
+    "gcal_ids": ["calendar_name integer, calendar_id integer, todoist_project_id integer, calendar_sync_token text"],
+    "todoist_completed": ["project_id integer, parent_project_id integer, task_id integer, due_date text, event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer"],
+    "todoist": ["project_id integer, parent_project_id integer, task_id integer, due_date text, event_id integer, overdue integer, times_overdue integer, times_resheduled_on_due_date integer"]
+}

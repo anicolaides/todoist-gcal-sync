@@ -40,8 +40,8 @@ def folder_higherarchy():
 def self_cleanup(gcal_obj):
     """ Erases the data of the daemon. """
 
-    db_path = 'db/data.db'
-    reset_file = 'reset_daemon'
+    db_path = load_cfg.USER_PREFS['db.path']
+    reset_file = load_cfg.USER_PREFS['reset.file']
 
     if gcal_obj.delete_cals():
         try:
@@ -62,7 +62,7 @@ def self_cleanup(gcal_obj):
 def main():
     my_gcal = gcal.Gcal()
 
-    if os.path.exists('reset_daemon'):
+    if os.path.exists(load_cfg.USER_PREFS['reset.file']):
         self_cleanup(my_gcal)
 
     my_todoist = todo.Todoist(load_cfg.USER_PREFS, load_cfg.TODOIST_SCHEMA)
