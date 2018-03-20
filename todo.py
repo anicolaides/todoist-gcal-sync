@@ -44,7 +44,6 @@ class Todoist:
             # to prevent losing sync data when the daemon shuts down
             self.sync_todoist(initial_sync)
         else:
-            # initialize database tables
             sql_ops.init_db()
 
             if settings['projects.standalone']:
@@ -81,13 +80,11 @@ class Todoist:
         for project in Todoist.api.projects.all():
             standalone_project = False
 
-            # search for project in "excluded_ids"
+            # if project is excluded
             if sql_ops.select_from_where("project_id", "excluded_ids", "project_id", \
                     project['id']):
                 log.info('The project \'' + Todoist.api.projects.get_by_id(
                 project['id'])['name'] + '\' is beeing excluded.')
-
-            # if not excluded
             else:
                 # search for project in "standalone_ids"
                 if sql_ops.select_from_where("project_id", "standalone_ids", \

@@ -73,22 +73,17 @@ def select_from_where(select_operand, table_name, where_operand=None, condition=
     with conn:
         c = conn.cursor()
 
-        if where_operand is None and condition is None:
-            try:
+        try:
+            if where_operand is None and condition is None:
                 c.execute("SELECT " + select_operand + " FROM " + table_name)
-            except sqlite3.OperationalError as err:
-                log.debug(err)
-        elif where_operand and condition is None and not args:
-            try:
+            elif where_operand and condition is None and not args:
                 c.execute("SELECT " + select_operand + " FROM " + table_name + " WHERE " + where_operand)
-            except sqlite3.OperationalError as err:
-                log.debug(err)
-        else:
-            try:
-                c.execute("SELECT " + select_operand + " FROM " + table_name + " WHERE " + where_operand, \
-                    args)
-            except sqlite3.OperationalError as err:
-                log.debug(err)
+            elif where_operand and condition:
+                c.execute("SELECT " + select_operand + " FROM " + table_name + " WHERE " + where_operand + "=?", (condition,))
+            else:
+                c.execute("SELECT " + select_operand + " FROM " + table_name + " WHERE " + where_operand, args)
+        except sqlite3.OperationalError as err:
+            log.exception(err)
 
         if fetch_all:
             data = c.fetchall()
