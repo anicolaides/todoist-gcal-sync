@@ -195,7 +195,7 @@ class TodoistSync:
                             not_overdue_tasks[task][1], 11):
 
                             # update 'todoist' table to reflect overdue status
-                            if sql_ops.update_set_where("todoist", "overdue", "task_id", overdue, task_id):
+                            if sql_ops.update_set_where("todoist", "overdue = ? ", "task_id = ?", overdue, task_id):
                                 log.info('Task with id: ' + str(item['id']) + ' has become overdue.')
                             else:
                                 log.warning('Could update event date on Gcal, but could not update \
@@ -213,7 +213,7 @@ class TodoistSync:
                             times_overdue += 1
                         else:
                             times_overdue = 1
-                        sql_ops.update_set_where("todoist", "times_overdue", "task_id", times_overdue, task_id)
+                        sql_ops.update_set_where("todoist", "times_overdue = ?", "task_id = ?", times_overdue, task_id)
 
     def date_google(self, calendar_id, new_due_date=None, item_id=None, item_content=None, event_id=None, extended_date=None):
         op_code = False
@@ -258,7 +258,7 @@ class TodoistSync:
                 colorId, extended_utc) and new_due_date:
 
                 # update 'todoist' table with new due_date_utc
-                if sql_ops.update_set_where("todoist", "due_date = ?, event_id = ?, overdue = ?", "task_id", new_due_date, event_id, overdue ,item_id):
+                if sql_ops.update_set_where("todoist", "due_date = ?, event_id = ?, overdue = ?", "task_id = ?", new_due_date, event_id, overdue ,item_id):
                     op_code = True
                 else:
                     op_code = False
@@ -476,7 +476,7 @@ class TodoistSync:
 
                     # update project_id and parent_project_id of db with the new data,
                     # so we can perform the move again
-                    if sql_ops.update_set_where("todoist", "project_id = ?, parent_project_id = ?", "task_id", \
+                    if sql_ops.update_set_where("todoist", "project_id = ?, parent_project_id = ?", "task_id = ?", \
                         parent_project_id, project_id , task_id):
                         op_code = True
                     else:

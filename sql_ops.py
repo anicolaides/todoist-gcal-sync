@@ -135,7 +135,7 @@ def update_set_where(table_name, columns, where_operand, *args):
         c = conn.cursor()
 
         try:
-            c.execute("UPDATE " + table_name + " SET " + columns + " WHERE " + where_operand + " = ? ", args)
+            c.execute("UPDATE " + table_name + " SET " + columns + " WHERE " + where_operand, args)
             conn.commit()
         except sqlite3.OperationalError as err:
             updated = False

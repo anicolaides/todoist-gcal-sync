@@ -68,6 +68,7 @@ class Gcal:
         return event_id
 
     def create_calendar(self, project_name, project_id, todoist_tz):
+        cal_created = False
         cal_exists = False
         cal_project_name = 'Project: ' + project_name
         cal_id = None
@@ -99,6 +100,7 @@ class Gcal:
 
                 if sql_ops.insert_many("gcal_ids", cal_row):
                     log.info("'" + cal_project_name + "'" + ' has been created.')
+                    cal_created = True
             except errors.HttpError as err:
                 log.exception(err._get_reason)
                 time.sleep(1)
@@ -122,6 +124,7 @@ class Gcal:
                         log.info(cal_project_name + "\' has been added to the database.")
                 else:
                     log.warning(cal_project_name + '\' already exists.')
+        return cal_created
 
     def sync_cal_deletion(self):
         """ Delete info of calendar that got deleted from Google's server. """
@@ -374,7 +377,7 @@ class Gcal:
                 log.debug(err)
 
             # update calendar_sync_token in "gcal_ids" table
-            sql_ops.update_set_where("gcal_ids", "calendar_sync_token = ?", "calendar_id", temp_token, cal_ids[i][0])
+            sql_ops.update_set_where("gcal_ids", "calendar_sync_token = ?", "calendar_id = ?", temp_token, cal_ids[i][0])
 
     def set_todoist_ref(self, todoist_obj_ref):
         self.todoist = todoist_obj_ref

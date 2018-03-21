@@ -63,6 +63,11 @@ class Todoist:
         if self.premium_user:
             self.init_completed_tasks()
 
+        for project in Todoist.api.projects.all():
+            if not project['is_archived'] and not project['is_deleted'] and project['id'] != self.inbox_project_id:
+                project_data = [project['name'], project['parent_id'], project['id'], project['indent']]
+                sql_ops.insert_many("projects", project_data)
+
         for item in Todoist.api.items.all(self.has_due_date_utc):
             # Todoist task --> Gcal event
             self.sync.new_task_added(item)
@@ -250,7 +255,6 @@ class Todoist:
             project = project_changes[k]
             calendar_id = None
             calendar_name = None
-            # check if project is in "gcal_ids" table
             project_found = False
 
             calendar_data = sql_ops.select_from_where("calendar_id, calendar_name", "gcal_ids", "todoist_project_id", project['id'])
@@ -260,45 +264,43 @@ class Todoist:
                 calendar_name = calendar_data[1]
                 project_found = True
 
-            # new parent project added
-            if not project_found and project['parent_id'] is None and not project['is_archived'] and not project['is_deleted']:
-                # make sure project['id'] is not being excluded
-                if not self.is_excluded(project['id']):
-                    self.gcal.create_calendar(project['name'], project['id'], self.todoist_user_tz)
-            elif project_found and project['is_deleted'] or project['is_archived']:
-                if self.gcal.delete_calendar(calendar_id):
-                    log.info(str(project['name']) + " has been deleted successfully.")
-                    sql_ops.delete_from_where("gcal_ids", "calendar_id", calendar_id)
+            # new project
+            if not project_found:
+                if project['parent_id'] is None \
+                    and not project['is_archived'] and not project['is_deleted']:
 
-                    if project['parent_id'] is None:
-                        # parent project
-                        if sql_ops.delete_from_where("todoist", "parent_project_id", project['id']):
-                            log.info("Parent project's task clean up has been performed.")
-                    else:
-                        # sub project
-                        if sql_ops.delete_from_where("todoist", "project_id", project['id']):
-                            log.info("Project's task clean up has been performed.")
-            elif project_found and not project['is_archived'] and not project['is_deleted']:
-                # Todoist --> Gcal (Project name sync)
-                # Retrieve calendar name from db
-                prev_project_name = (calendar_name.split('Project:')[1]).strip()
-                if prev_project_name != project['name']:
-                    # update calendar name
-                    new_cal_name = 'Project: ' + project['name']
-                    if self.gcal.update_cal_name(calendar_id, new_cal_name):
-                        # update name in "gcal_ids" table
-                        if sql_ops.update_set_where("gcal_ids", "calendar_name", "calendar_id", new_cal_name, calendar_id):
-                            log.info("Calendar name has been synched with Gcal.")
-                # parent project becomes sub project
-                if project['id'] is not None:
-                    # remove calendar from gcal
-                    if self.gcal.delete_calendar(calendar_id):
-                        log.info(str(project['name']) + " parent project has been deleted to become a sub project.")
-                        # remove calendar from "gcal_ids" table
-                        sql_ops.delete_from_where("gcal_ids", "calendar_id", calendar_id)
+                    project_data = sql_ops.select_from_where("project_name, project_indent", "projects", "project_id", project['id'])
+                    if not project_data:
+                        if self.gcal.create_calendar(project['name'], project['id'], self.todoist_user_tz):
+                            row_data = [project['name'], project['parent_id'], project['id'], project['indent']]
+                            sql_ops.insert_many("projects", row_data)
+            else:
+
+                project_data = sql_ops.select_from_where("project_name, project_indent", "projects", "project_id", project['id'])
+                if project_data:
+                    project_name = project_data[0]
+                    prev_project_indent = project_data[1]
+                    project_parent_id = self.__parent_project_id__(project['id'])
+
+                    # sub project becomes parent project
+                    if prev_project_indent != 1 and project['indent'] == 1 and not self.is_excluded(project['id']):
+
+                        # remove tasks from calendar of prev parent project
+                        tasks = sql_ops.select_from_where("event_id, task_id", "todoist", "project_id", project['id'], fetch_all=True)
+                        for task in tasks:
+                            event_id = task[0]
+                            task_id = task[1]
+                            calendar_id = self.find_cal_id(project['id'], self.find_cal_id(project['id'], project_parent_id))
+
+                            # delete event from existing calendar
+                            self.gcal.delete_event(calendar_id, event_id)
 
                         # remove tasks from "todoist" table
-                        sql_ops.delete_from_where("todoist", "project_id", project['id'])
+                        if sql_ops.delete_from_where("todoist", "project_id", project['id']):
+                            log.debug("All events have been deleted from previous parent project calendar, to be moved to the new calendar.")
+
+                        # create calendar as parent project
+                        self.gcal.create_calendar(project['name'], project['id'], self.todoist_user_tz)
 
                         # init tasks of particular project
                         for item in Todoist.api.items.all(self.has_due_date_utc):
@@ -306,7 +308,56 @@ class Todoist:
                                 # Todoist task --> Gcal event
                                 self.sync.new_task_added(item)
 
+                        # update "projects" table to reflect new indentation level
+                        sql_ops.update_set_where("projects", "project_indent = ?", "project_id = ?", project['indent'], project['id'])
+
+
+                if project['is_deleted'] or project['is_archived']:
+                    if self.gcal.delete_calendar(calendar_id):
+                        log.info(project['name'] + " has been deleted successfully.")
+                        sql_ops.delete_from_where("gcal_ids", "calendar_id", calendar_id)
+
+                        # parent project
+                        if project['parent_id'] is None:
+                            if sql_ops.delete_from_where("todoist", "parent_project_id", project['id']):
+                                log.info("Parent project's task clean up has been performed.")
+                        else:
+                            # sub project
+                            if sql_ops.delete_from_where("todoist", "project_id", project['id']):
+                                log.info("Project's task clean up has been performed.")
+                        sql_ops.delete_from_where("projects", "project_id", project['id'])
+                else:
+                    # Todoist --> Gcal (Project name sync)
+                    # Retrieve calendar name from db
+                    prev_project_name = (calendar_name.split('Project:')[1]).strip()
+                    if prev_project_name != project['name']:
+                        # update calendar name
+                        new_cal_name = 'Project: ' + project['name']
+                        if self.gcal.update_cal_name(calendar_id, new_cal_name):
+                            # update name in "gcal_ids" table
+                            if sql_ops.update_set_where("gcal_ids", "calendar_name = ?", "calendar_id = ?", new_cal_name, calendar_id):
+                                log.info("Calendar name has been synched with Gcal.")
+
+                    # parent project becomes sub project
+                    if project['id'] is not None and project['indent'] != 1:
+                        # remove calendar from gcal
+                        if self.gcal.delete_calendar(calendar_id):
+                            log.info(str(project['name']) + " parent project has been deleted to become a sub project.")
+                            # remove calendar from "gcal_ids" table
+                            sql_ops.delete_from_where("gcal_ids", "calendar_id", calendar_id)
+
+                            # remove tasks from "todoist" table
+                            sql_ops.delete_from_where("todoist", "project_id", project['id'])
+
+                            # init tasks of particular project
+                            for item in Todoist.api.items.all(self.has_due_date_utc):
+                                if item['project_id'] == project['id']:
+                                    # Todoist task --> Gcal event
+                                    self.sync.new_task_added(item)
+
+                            sql_ops.update_set_where("projects", "parent_project_id = ?, project_indent = ?", "project_id = ?", project['parent_id'], project['indent'], project['id'])
         """
+
         # if anything changed since last sync, then
         # for each changed item, perform the following operations
         for i in range(0, len(changes)):
@@ -532,7 +583,7 @@ class Todoist:
             else:
                 self.gcal.update_event_color(cal_id,event_id,11)
 
-            sql_ops.update_set_where("todoist", "due_date = ?", "task_id", item['due_date_utc'], task_id)
+            sql_ops.update_set_where("todoist", "due_date = ?", "task_id = ?", item['due_date_utc'], task_id)
 
     def init_completed_tasks(self):
         completed_task = Todoist.api.completed.get_all(limit=200)['items']
@@ -657,6 +708,10 @@ class Todoist:
     def is_excluded(self, project_id):
         """ Returns true if project is being excluded. """
         return True if sql_ops.select_from_where("project_name", "excluded_ids", "project_id", project_id) else False
+
+    def is_standalone(self, project_id):
+        """ Returns true if project uses a standalone calendar. """
+        return True if sql_ops.select_from_where("project_name", "standalone_ids", "project_id", project_id) else False
 
     ########### Utility functions ###########
     def has_due_date_utc(self, todoist_item):
