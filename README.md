@@ -1,6 +1,8 @@
 # todoist-gcal-sync
-Bi-directional syncing between Todoist and Google Calendar
+[![Build Status](https://travis-ci.org/alexandrosio/todoist-gcal-sync.svg?branch=master)](https://travis-ci.org/alexandrosio/todoist-gcal-sync)
+![apm](https://img.shields.io/apm/l/vim-mode.svg)
 
+Bi-directional syncing between Todoist and Google Calendar
 
 ## Getting Started
 First and foremost, why ... use Google Calendar with Todoist?
