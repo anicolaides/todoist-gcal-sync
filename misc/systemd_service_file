@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=PATH_TO_CLONED_REPO
-ExecStart=/usr/bin/python3 PATH_TO_CLONED_REPO/daemon.py
+ExecStart=/usr/bin/python3 PATH_TO_CLONED_REPO/src/daemon.py
 Restart=always
 SyslogIdentifier=todoist-gcal-sync
 StandardOutput=null
