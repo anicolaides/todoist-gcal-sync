@@ -1,10 +1,9 @@
 """
-File: gcal_OAuth.py
-Purpose: Authenticate Google Calendar.
-Author: Alexandros Nicolaides
+Authenticates Google Calendar.
+
 Dependencies: google-api-python-client
 
-Should Google change the auth process please refer to:
+Should Google change the auth process refer to:
 https://developers.google.com/google-apps/calendar/quickstart/python
 
 More info on the auth process here:
@@ -16,6 +15,8 @@ import os
 import logging
 
 log = logging.getLogger(__name__)
+__author__ = "Alexandros Nicolaides"
+__status__ = "production"
 
 try:
     from oauth2client import client
@@ -41,8 +42,9 @@ https://developers.google.com/identity/protocols/googlescopes
 """
 
 SCOPES = 'https://www.googleapis.com/auth/calendar'
-CLIENT_SECRET_FILE = 'credentials/client_secret.json'
+CLIENT_SECRET_FILE = '../credentials/client_secret.json'
 APPLICATION_NAME = 'todoist_gcal_sync'
+
 
 def get_credentials():
     """Gets valid user credentials from storage.

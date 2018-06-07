@@ -1,12 +1,9 @@
 """
-File: sql_ops.py
-Purpose: Perform sql operations on database (FOR INTERNAL USE ONLY).
-Author: Alexandros Nicolaides
-Dependencies:
-"""
+Performs sql operations on project's database (FOR INTERNAL USE ONLY).
 
-"""
-    WARNING:
+Dependencies:
+
+WARNING:
     Some practises used in this file shall not be used by public APIs due to security corcerns.
     This file is used internally, for convenience and code reusability.
 """
@@ -16,16 +13,20 @@ import logging
 import load_cfg
 
 log = logging.getLogger(__name__)
+__author__  = "Alexandros Nicolaides"
+__status__  = "testing"
 
 def init_db():
-    """ Creates tables by fetching info from 'db_schema.json'. """
+    """
+    Creates tables by fetching info from 'db_schema.json'.
+    """
     for table_name in load_cfg.DB_SCHEMA:
         for table_schema in load_cfg.DB_SCHEMA[table_name]:
             create_table(table_name, table_schema)
 
 def create_table(table_name, table_schema):
     """ Create a table in the db using the args provided. """
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
 
     with conn:
         c = conn.cursor()
@@ -37,7 +38,7 @@ def create_table(table_name, table_schema):
 def truncate_table(table_name):
     """ Truncates table provided. """
     truncated = True
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
 
     with conn:
         c = conn.cursor()
@@ -53,7 +54,7 @@ def truncate_table(table_name):
 def delete_from_where(table_name, column_name, condition):
     """ Returns true upon successful deletion, otherwise false. """
     deleted = True
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
 
     with conn:
         c = conn.cursor()
@@ -68,7 +69,7 @@ def delete_from_where(table_name, column_name, condition):
 
 def select_from_where(select_operand, table_name, where_operand=None, condition=None, fetch_all=False, cursor=False, *args):
     """ Returns data upon successful retrieval from db. """
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
     data = None
     with conn:
         c = conn.cursor()
@@ -94,7 +95,7 @@ def select_from_where(select_operand, table_name, where_operand=None, condition=
 def insert(table_name, *args):
     """ Inserts data to table. """
     insertion = True
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
 
     with conn:
         c = conn.cursor()
@@ -112,7 +113,7 @@ def insert(table_name, *args):
 def insert_many(table_name, row_data):
     """ Inserts row of data to table. """
     insertion = True
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
 
     with conn:
         c = conn.cursor()
@@ -129,7 +130,7 @@ def insert_many(table_name, row_data):
 def update_set_where(table_name, columns, where_operand, *args):
     """ Updates table based on some conditions. """
     updated = True
-    conn = sqlite3.connect(load_cfg.USER_PREFS['db.path'])
+    conn = sqlite3.connect(load_cfg.DB_PATH)
 
     with conn:
         c = conn.cursor()

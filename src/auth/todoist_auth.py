@@ -1,14 +1,16 @@
 """
-File: todoist_auth.py
-Purpose: Retrieve Todoist API token.
-Author: Alexandros Nicolaides
+Retrieves Todoist API token.
+
 Dependencies:
 """
 
+import os
 import sys
 import logging
 
 log = logging.getLogger(__name__)
+__author__  = "Alexandros Nicolaides"
+__status__  = "production"
 
 TODOIST_TOKEN_FILE_NAME = 'todoist_token'
 
@@ -22,7 +24,8 @@ def retrieve_token(token_file_name):
     """
         Retrieves Todoist API token from file.
     """
-    with open('credentials/' + token_file_name, 'r') as token_file:
+    credentials_path = str(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, 'credentials/'))) + '/'
+    with open(credentials_path + token_file_name, 'r') as token_file:
         try:
             api_token = token_file.readline().split(None, 1)[0]
 

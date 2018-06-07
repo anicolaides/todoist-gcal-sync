@@ -1,138 +1,174 @@
 {
-    "version": 1,
-    "disable_existing_loggers": true,
-    "formatters": {
-        "standard": {
-            "()": "ext://mylogging.UTCFormatter",
-            "format": "%(asctime)s  %(levelname)-8s %(filename)s:%(funcName)s:%(lineno)d  %(message)s"
-        }
-    },
-    "filters": {
-        "debug_filter": {
-            "()": "ext://mylogging.MyFilter",
-            "op": "ext://operator.eq",
-            "level": "DEBUG"
-        },
-        "info_filter": {
-            "()": "ext://mylogging.MyFilter",
-            "op": "ext://operator.eq",
-            "level": "INFO"
-        },
-        "warning_filter": {
-            "()": "ext://mylogging.MyFilter",
-            "op": "ext://operator.ge",
-            "level": "WARNING"
-        }
-    },
-    "handlers": {
-        "consoleHandler": {
-            "class": "logging.StreamHandler",
-            "level": "INFO",
-            "formatter": "standard",
-            "stream": "ext://sys.stdout"
-        },
-        "debug_file_handler": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "level": "DEBUG",
-            "formatter": "standard",
-            "filename": "logs/debug.log",
-            "when": "d",
-            "interval": 14,
-            "backupCount": 2,
-            "encoding": "utf-8",
-            "utc": true,
-            "filters": ["debug_filter"]
-        },
-        "info_file_handler": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "level": "INFO",
-            "formatter": "standard",
-            "filename": "logs/info.log",
-            "when": "d",
-            "interval": 14,
-            "backupCount": 2,
-            "encoding": "utf-8",
-            "utc": true,
-            "filters": ["info_filter"]
-        },
-        "err_file_handler": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "level": "WARNING",
-            "formatter": "standard",
-            "filename": "logs/err.log",
-            "when": "d",
-            "interval": 14,
-            "backupCount": 2,
-            "encoding": "utf-8",
-            "utc": true,
-            "filters": ["warning_filter"]
-        },
-        "mail_handler": {
-            "class": "logging.handlers.SMTPHandler",
-            "level": "WARNING",
-            "formatter": "standard",
-            "mailhost": ["smtp.gmail.com", 587],
-            "fromaddr": "YOUR_GMAIL_USERNAME@gmail.com",
-            "toaddrs": ["YOUR_GMAIL_USERNAME@gmail.com"],
-            "subject": "Error found!",
-            "credentials": ["YOUR_GMAIL_USERNAME@gmail.com", "ONE_TIME_APP_PASSWORD"],
-            "secure": [],
-            "filters": ["warning_filter"]
-        },
-        "q_handler": {
-            "class": "logging.handlers.QueueHandler",
-            "queue": "ext://mylogging.my_queue"
-        }
-    },
-    "loggers":{
-        "":{
-            "level": "WARNING",
-            "handlers": ["q_handler"]
-        },
-        "__main__":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "todo":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "todoist_auth":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "todoist_sync_handlers":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "gcal":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "load_cfg":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "gcal_OAuth":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "gcal_sync_handlers":{
-            "level": "DEBUG",
-            "handlers": ["q_handler"],
-            "propagate": false
-        },
-        "googleapiclient.discovery":{
-            "level": "WARNING",
-            "handlers": ["q_handler"],
-            "propagate": false
-        }
+  "version": 1,
+  "disable_existing_loggers": true,
+  "formatters": {
+    "standard": {
+      "()": "ext://mylogging.UTCFormatter",
+      "format": "%(asctime)s  %(levelname)-8s %(filename)s:%(funcName)s:%(lineno)d  %(message)s"
     }
+  },
+  "filters": {
+    "debug_filter": {
+      "()": "ext://mylogging.MyFilter",
+      "op": "ext://operator.eq",
+      "level": "DEBUG"
+    },
+    "info_filter": {
+      "()": "ext://mylogging.MyFilter",
+      "op": "ext://operator.eq",
+      "level": "INFO"
+    },
+    "warning_filter": {
+      "()": "ext://mylogging.MyFilter",
+      "op": "ext://operator.ge",
+      "level": "WARNING"
+    }
+  },
+  "handlers": {
+    "consoleHandler": {
+      "class": "logging.StreamHandler",
+      "level": "INFO",
+      "formatter": "standard",
+      "stream": "ext://sys.stdout"
+    },
+    "debug_file_handler": {
+      "class": "logging.handlers.TimedRotatingFileHandler",
+      "level": "DEBUG",
+      "formatter": "standard",
+      "filename": "../logs/debug.log",
+      "when": "d",
+      "interval": 14,
+      "backupCount": 2,
+      "encoding": "utf-8",
+      "utc": true,
+      "filters": [
+        "debug_filter"
+      ]
+    },
+    "info_file_handler": {
+      "class": "logging.handlers.TimedRotatingFileHandler",
+      "level": "INFO",
+      "formatter": "standard",
+      "filename": "../logs/info.log",
+      "when": "d",
+      "interval": 14,
+      "backupCount": 2,
+      "encoding": "utf-8",
+      "utc": true,
+      "filters": [
+        "info_filter"
+      ]
+    },
+    "err_file_handler": {
+      "class": "logging.handlers.TimedRotatingFileHandler",
+      "level": "WARNING",
+      "formatter": "standard",
+      "filename": "../logs/err.log",
+      "when": "d",
+      "interval": 14,
+      "backupCount": 2,
+      "encoding": "utf-8",
+      "utc": true,
+      "filters": [
+        "warning_filter"
+      ]
+    },
+    "mail_handler": {
+      "class": "logging.handlers.SMTPHandler",
+      "level": "WARNING",
+      "formatter": "standard",
+      "mailhost": [
+        "smtp.gmail.com",
+        587
+      ],
+      "fromaddr": "YOUR_GMAIL_USERNAME@gmail.com",
+      "toaddrs": [
+        "YOUR_GMAIL_USERNAME@gmail.com"
+      ],
+      "subject": "Error found!",
+      "credentials": [
+        "YOUR_GMAIL_USERNAME@gmail.com",
+        "ONE_TIME_APP_PASSWORD"
+      ],
+      "secure": [],
+      "filters": [
+        "warning_filter"
+      ]
+    },
+    "q_handler": {
+      "class": "logging.handlers.QueueHandler",
+      "queue": "ext://mylogging.my_queue"
+    }
+  },
+  "loggers": {
+    "": {
+      "level": "WARNING",
+      "handlers": [
+        "q_handler"
+      ]
+    },
+    "__main__": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "todo": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "todoist_auth": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "todoist_sync_handlers": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "gcal": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "load_cfg": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "gcal_OAuth": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "gcal_sync_handlers": {
+      "level": "DEBUG",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    },
+    "googleapiclient.discovery": {
+      "level": "WARNING",
+      "handlers": [
+        "q_handler"
+      ],
+      "propagate": false
+    }
+  }
 }
