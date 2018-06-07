@@ -83,6 +83,8 @@ Please find attached a sample of my excluded/standalone projects' config.
 ```
 
 7. Run the app for the first time.
+
+    _Note: Please initialize todoist-gcal-sync with a root user, if you intend to use systemd to run the script as a service._
 ```shell
 cd ../src/ 
 python3 daemon.py --noauth_local_webserver
@@ -129,7 +131,8 @@ Finally, run the following to confirm the service is up and running:
    ```shell
    sudo service todoist-gcal-sync status
    ```
-_Note: If you had initialized todoist-gcal-sync with a non-root user, you may have to re-initialize the daemon using `python3 daemon.py --noauth_local_webserver` as google creates a credentials folder per user._
+_Warning: If you experience issues with systemd, use `journalctl -u todoist-gcal-sync.service` to investigate further._
+
 ## How to reset the daemon
 
 ```shell
