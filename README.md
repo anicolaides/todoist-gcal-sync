@@ -20,7 +20,7 @@ For an always up-to-date list of dependencies - see [dependencies.txt](/misc/dep
 
 Install dependencies using:
 ```
-pip3 install -r /misc/dependencies.txt
+pip3 install -r ./misc/dependencies.txt
 ```
 
 ### Installing
@@ -84,7 +84,7 @@ Please find attached a sample of my excluded/standalone projects' config.
 
 7. Run the app for the first time.
 ```shell
-cd ..
+cd ../src/ 
 python3 daemon.py --noauth_local_webserver
 ```
 
