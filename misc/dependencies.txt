@@ -1,4 +1,5 @@
 google-api-python-client
+oauth2client
 schedule 
 jsmin
 simplejson
