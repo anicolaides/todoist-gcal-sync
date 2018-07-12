@@ -1,9 +1,11 @@
 google-api-python-client
 oauth2client
-schedule 
+schedule
 jsmin
 simplejson
-todoist-python 
-pytz 
-jsonschema 
+todoist-python
+pytz
+jsonschema
 python-dateutil
+click
+tqdm

@@ -1,0 +1,36 @@
+{
+  // Required
+  /* https://developer.todoist.com/sync/v7/#limits
+       60s/1.5s = 40 requests/min to prevent Todoist timeouts */
+  "daemon.refreshRateSec": 1.3,
+  "daemon.connErrDelaySec": 30,
+
+  // User Preferences
+  "projects.excluded": ["Someday | Maybe"],
+  "projects.standalone": [],
+
+  // Aesthetics
+  "appearance.displayReccuringIcon": false,
+  "appearance.displayReccuringIconCompleted": false,
+
+  // Logging
+  "logging": true,
+
+  // TODO.......
+  "procrastination.detection": true,
+  "procrastination.overdueOccurenceLimit": 2,
+  "procrastination.resheduleOccurenceLimit": 5,
+
+  // TODO........
+  "tasks.priorityAutoAdjust": true,
+  "tasks.priorityAutoAdjustExclude": ["project_name"],
+
+  // TODO........
+  "events.notification": true,
+  "events.reminder": [
+    {
+      "method": "popup",
+      "minutes": 300
+    }
+  ]
+}
