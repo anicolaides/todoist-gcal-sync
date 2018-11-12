@@ -1,4 +1,4 @@
-# todoist-gcal-sync
+# [DEPRECATED] todoist-gcal-sync 
 [![Build Status](https://travis-ci.org/alexandrosio/todoist-gcal-sync.svg?branch=master)](https://travis-ci.org/alexandrosio/todoist-gcal-sync)
 ![apm](https://img.shields.io/apm/l/vim-mode.svg)
 
